@@ -1,0 +1,318 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "postgresql://postgres:1205@localhost:5432/urbanapp_db"
+}
+
+model USUARIOS {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cedula          String   @unique @db.VarChar(20)
+  nombres         String   @db.VarChar(100)
+  apellidos       String   @db.VarChar(100)
+  correo          String   @unique @db.VarChar(150)
+  telefono        String?  @db.VarChar(20)
+  usuario         String   @unique @db.VarChar(50)
+  contrasena_hash String   @db.VarChar(255)
+  rol             String   @db.VarChar(20)
+  estado          String   @default("pendiente") @db.VarChar(20)
+  created_at      DateTime @default(now())
+  creado_por      String?  @db.Uuid
+
+  creadoPor            USUARIOS?             @relation("UsuarioCreadoPor", fields: [creado_por], references: [id])
+  usuariosCreados      USUARIOS[]            @relation("UsuarioCreadoPor")
+  residente            RESIDENTES?
+  administrador        ADMINISTRADORES?
+  guardia              GUARDIAS?
+  notificaciones       NOTIFICACIONES[]
+  aceptacionTerminos   ACEPTACION_TERMINOS[]
+  gestion_usuarios_log GESTION_USUARIOS_LOG[]
+}
+
+model RESIDENTES {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_id String   @unique @db.Uuid
+  manzana    String   @db.VarChar(10)
+  villa      String   @db.VarChar(10)
+  foto_url   String?  @db.VarChar(255)
+  updated_at DateTime @default(now())
+
+  usuario    USUARIOS       @relation(fields: [usuario_id], references: [id])
+  alicuotas  ALICUOTAS[]
+  pagos      PAGOS[]
+  visitantes VISITANTES[]
+  codigos_qr CODIGOS_QR[]
+  ingresos   INGRESOS[]
+  reservas   RESERVAS[]
+}
+
+model ADMINISTRADORES {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_id        String   @unique @db.Uuid
+  id_administrador  String   @unique @db.VarChar(30)
+  foto_url          String?  @db.VarChar(255)
+  updated_at        DateTime @default(now())
+
+  usuario              USUARIOS               @relation(fields: [usuario_id], references: [id])
+  documentos           DOCUMENTOS[]
+  pagos_validados      PAGOS[]
+  reservas_validadas   RESERVAS[]
+  reportes             REPORTES[]
+  gestion_usuarios_log GESTION_USUARIOS_LOG[]
+}
+
+model TURNOS {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre      String   @unique @db.VarChar(20)
+  hora_inicio DateTime @db.Time
+  hora_fin    DateTime @db.Time
+  descripcion String?  @db.VarChar(100)
+
+  guardias        GUARDIAS[]
+  bitacora_turnos BITACORA_TURNOS[]
+}
+
+model GUARDIAS {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_id String   @unique @db.Uuid
+  id_guardia String   @unique @db.VarChar(30)
+  turno_id   String   @db.Uuid
+  foto_url   String?  @db.VarChar(255)
+  updated_at DateTime @default(now())
+
+  usuario         USUARIOS          @relation(fields: [usuario_id], references: [id])
+  turno           TURNOS            @relation(fields: [turno_id], references: [id])
+  bitacora_turnos BITACORA_TURNOS[]
+  ingresos        INGRESOS[]
+}
+
+model DOCUMENTOS {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  titulo      String   @db.VarChar(200)
+  tipo        String   @db.VarChar(30)
+  archivo_url String   @db.VarChar(255)
+  version     String   @db.VarChar(20)
+  visible_para String  @db.VarChar(20)
+  subido_por  String   @db.Uuid
+  activo      Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  administrador      ADMINISTRADORES       @relation(fields: [subido_por], references: [id])
+  aceptacion_terminos ACEPTACION_TERMINOS[]
+}
+
+model ACEPTACION_TERMINOS {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_id        String   @db.Uuid
+  documento_id      String   @db.Uuid
+  version_documento String   @db.VarChar(20)
+  fecha_aceptacion  DateTime @default(now())
+  ip_dispositivo    String?  @db.VarChar(45)
+
+  usuario   USUARIOS   @relation(fields: [usuario_id], references: [id])
+  documento DOCUMENTOS @relation(fields: [documento_id], references: [id])
+
+  @@unique([usuario_id, documento_id], name: "uq_aceptacion_usuario_documento")
+}
+
+model ALICUOTAS {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  residente_id     String   @db.Uuid
+  mes              Int
+  anio             Int
+  monto            Decimal  @db.Decimal(10, 2)
+  fecha_vencimiento DateTime @db.Date
+  estado           String   @default("pendiente") @db.VarChar(20)
+  created_at       DateTime @default(now())
+
+  residente RESIDENTES @relation(fields: [residente_id], references: [id])
+  pagos     PAGOS[]
+
+  @@unique([residente_id, mes, anio], name: "uq_alicuota_periodo")
+}
+
+model PAGOS {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  residente_id         String    @db.Uuid
+  alicuota_id          String?   @db.Uuid
+  reserva_id           String?   @db.Uuid
+  tipo_pago            String    @db.VarChar(20)
+  mes_pago             Int
+  anio_pago            Int
+  metodo_pago          String    @db.VarChar(30)
+  banco                String    @db.VarChar(100)
+  comprobante_url      String    @db.VarChar(255)
+  formato_archivo      String    @db.VarChar(5)
+  estado               String    @default("pendiente") @db.VarChar(20)
+  observacion_residente String?  @db.Text
+  observacion_admin    String?   @db.Text
+  validado_por         String?   @db.Uuid
+  fecha_envio          DateTime  @default(now())
+  fecha_validacion     DateTime?
+
+  residente     RESIDENTES      @relation(fields: [residente_id], references: [id])
+  alicuota      ALICUOTAS?      @relation(fields: [alicuota_id], references: [id])
+  reserva       RESERVAS?       @relation(fields: [reserva_id], references: [id])
+  administrador ADMINISTRADORES? @relation(fields: [validado_por], references: [id])
+}
+
+model NOTIFICACIONES {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_id String   @db.Uuid
+  tipo       String   @db.VarChar(30)
+  titulo     String   @db.VarChar(150)
+  mensaje    String   @db.Text
+  leida      Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  usuario USUARIOS @relation(fields: [usuario_id], references: [id])
+}
+
+model VISITANTES {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  residente_id          String   @db.Uuid
+  nombre_visitante      String   @db.VarChar(150)
+  fecha_visita          DateTime @db.Date
+  hora_estimada_ingreso DateTime @db.Time
+  observacion           String?  @db.Text
+  created_at            DateTime @default(now())
+
+  residente  RESIDENTES   @relation(fields: [residente_id], references: [id])
+  codigos_qr CODIGOS_QR[]
+  ingresos   INGRESOS[]
+}
+
+model CODIGOS_QR {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  visitante_id     String   @db.Uuid
+  residente_id     String   @db.Uuid
+  codigo_hash      String   @unique @db.VarChar(255)
+  estado           String   @default("activo") @db.VarChar(20)
+  fecha_expiracion DateTime
+  intentos_fallidos Int     @default(0)
+  created_at       DateTime @default(now())
+
+  visitante VISITANTES @relation(fields: [visitante_id], references: [id])
+  residente RESIDENTES @relation(fields: [residente_id], references: [id])
+  ingresos  INGRESOS[]
+}
+
+model BITACORA_TURNOS {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  guardia_id       String    @db.Uuid
+  turno_id         String    @db.Uuid
+  fecha_turno      DateTime  @db.Date
+  hora_apertura    DateTime  @default(now())
+  hora_cierre      DateTime?
+  total_ingresos   Int       @default(0)
+  total_incidencias Int      @default(0)
+  reporte_pdf_url  String?   @db.VarChar(255)
+  estado           String    @default("activo") @db.VarChar(20)
+  created_at       DateTime  @default(now())
+
+  guardia  GUARDIAS   @relation(fields: [guardia_id], references: [id])
+  turno    TURNOS     @relation(fields: [turno_id], references: [id])
+  ingresos INGRESOS[]
+
+  @@unique([guardia_id, fecha_turno, turno_id], name: "uq_bitacora_turno_dia")
+}
+
+model INGRESOS {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo_qr_id          String   @db.Uuid
+  visitante_id          String   @db.Uuid
+  residente_id          String   @db.Uuid
+  guardia_id            String   @db.Uuid
+  bitacora_id           String   @db.Uuid
+  nombre_visitante      String   @db.VarChar(150)
+  manzana_destino       String   @db.VarChar(10)
+  villa_destino         String   @db.VarChar(10)
+  hora_ingreso          DateTime @default(now())
+  estado                String   @db.VarChar(20)
+  observacion_incidencia String? @db.Text
+
+  codigo_qr CODIGOS_QR      @relation(fields: [codigo_qr_id], references: [id])
+  visitante VISITANTES      @relation(fields: [visitante_id], references: [id])
+  residente RESIDENTES      @relation(fields: [residente_id], references: [id])
+  guardia   GUARDIAS        @relation(fields: [guardia_id], references: [id])
+  bitacora  BITACORA_TURNOS @relation(fields: [bitacora_id], references: [id])
+}
+
+model AREAS_SOCIALES {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre               String   @db.VarChar(100)
+  descripcion          String?  @db.Text
+  imagen_url           String?  @db.VarChar(255)
+  capacidad_max        Int
+  tarifa_reserva       Decimal  @db.Decimal(10, 2)
+  anticipacion_min_dias Int     @default(1)
+  cancelacion_max_horas Int     @default(24)
+  activa               Boolean  @default(true)
+  created_at           DateTime @default(now())
+
+  horarios HORARIOS_AREA[]
+  reservas RESERVAS[]
+}
+
+model HORARIOS_AREA {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  area_id          String   @db.Uuid
+  hora_inicio      DateTime @db.Time
+  hora_fin         DateTime @db.Time
+  dias_disponibles String?  @db.VarChar(50)
+
+  area AREAS_SOCIALES @relation(fields: [area_id], references: [id])
+
+  @@unique([area_id, hora_inicio, hora_fin], name: "uq_horario_area")
+}
+
+model RESERVAS {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  residente_id     String    @db.Uuid
+  area_id          String    @db.Uuid
+  fecha_reserva    DateTime  @db.Date
+  hora_inicio      DateTime  @db.Time
+  hora_fin         DateTime  @db.Time
+  estado           String    @default("pendiente") @db.VarChar(20)
+  bloqueo_temporal Boolean   @default(false)
+  bloqueo_hasta    DateTime?
+  observacion_admin String?  @db.Text
+  validado_por     String?   @db.Uuid
+  created_at       DateTime  @default(now())
+
+  residente     RESIDENTES       @relation(fields: [residente_id], references: [id])
+  area          AREAS_SOCIALES   @relation(fields: [area_id], references: [id])
+  administrador ADMINISTRADORES? @relation(fields: [validado_por], references: [id])
+  pagos         PAGOS[]
+
+  @@unique([area_id, fecha_reserva, hora_inicio], name: "uq_reserva_horario")
+}
+
+model REPORTES {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  administrador_id String    @db.Uuid
+  tipo             String    @db.VarChar(30)
+  mes              Int?
+  anio             Int?
+  fecha_desde      DateTime? @db.Date
+  fecha_hasta      DateTime? @db.Date
+  total_registros  Int?
+  archivo_pdf_url  String?   @db.VarChar(255)
+  created_at       DateTime  @default(now())
+
+  administrador ADMINISTRADORES @relation(fields: [administrador_id], references: [id])
+}
+
+model GESTION_USUARIOS_LOG {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  administrador_id    String   @db.Uuid
+  usuario_afectado_id String   @db.Uuid
+  accion              String   @db.VarChar(30)
+  detalle             String?  @db.Text
+  created_at          DateTime @default(now())
+
+  administrador     ADMINISTRADORES @relation(fields: [administrador_id], references: [id])
+  usuario_afectado  USUARIOS        @relation(fields: [usuario_afectado_id], references: [id])
+}
