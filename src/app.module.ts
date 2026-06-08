@@ -10,9 +10,10 @@ import { VisitantesModule } from './visitantes/visitantes.module';
 import { CodigosQrModule } from './codigos-qr/codigos-qr.module';
 import { AreasSocialesModule } from './areas-sociales/areas-sociales.module';
 import { ReservasModule } from './reservas/reservas.module';
+import { NotificacionesModule } from './notificaciones/notificaciones.module';
 
 @Module({
-  imports: [PrismaModule, UsuariosModule, AuthModule, AlicuotasModule, PagosModule, VisitantesModule, CodigosQrModule, AreasSocialesModule, ReservasModule],
+  imports: [PrismaModule, UsuariosModule, AuthModule, AlicuotasModule, PagosModule, VisitantesModule, CodigosQrModule, AreasSocialesModule, ReservasModule, NotificacionesModule],
   controllers: [AppController],
   providers: [AppService],
 })

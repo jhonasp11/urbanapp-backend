@@ -16,7 +16,7 @@ export class ReservasService {
       where: {
         area_id: dto.area_id,
         fecha_reserva: new Date(dto.fecha_reserva),
-        hora_inicio: new Date(`2000-01-01T${dto.hora_inicio}:00Z`),
+        hora_inicio: new Date(`2026-01-01T${dto.hora_inicio}:00Z`),
         estado: { in: ['pendiente', 'confirmada'] },
         bloqueo_temporal: true,
       },
