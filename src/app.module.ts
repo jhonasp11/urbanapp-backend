@@ -8,9 +8,11 @@ import { AlicuotasModule } from './alicuotas/alicuotas.module';
 import { PagosModule } from './pagos/pagos.module';
 import { VisitantesModule } from './visitantes/visitantes.module';
 import { CodigosQrModule } from './codigos-qr/codigos-qr.module';
+import { AreasSocialesModule } from './areas-sociales/areas-sociales.module';
+import { ReservasModule } from './reservas/reservas.module';
 
 @Module({
-  imports: [PrismaModule, UsuariosModule, AuthModule, AlicuotasModule, PagosModule, VisitantesModule, CodigosQrModule],
+  imports: [PrismaModule, UsuariosModule, AuthModule, AlicuotasModule, PagosModule, VisitantesModule, CodigosQrModule, AreasSocialesModule, ReservasModule],
   controllers: [AppController],
   providers: [AppService],
 })
