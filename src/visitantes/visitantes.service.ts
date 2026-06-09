@@ -11,9 +11,10 @@ export class VisitantesService {
       data: {
         residente_id: dto.residente_id,
         nombre_visitante: dto.nombre_visitante,
+        cedula_visitante: dto.cedula_visitante,
         fecha_visita: new Date(dto.fecha_visita),
         hora_estimada_ingreso: new Date(
-          `2026-01-01T${dto.hora_estimada_ingreso}:00Z`,
+          `2000-01-01T${dto.hora_estimada_ingreso}:00Z`,
         ),
         observacion: dto.observacion,
       },
