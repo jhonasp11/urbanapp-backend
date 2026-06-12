@@ -1,4 +1,12 @@
-import { Controller, Post, Body, Get, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Param,
+  Patch,
+  UseGuards,
+} from '@nestjs/common';
 import { UsuariosService } from './usuarios.service';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -12,6 +20,35 @@ export class UsuariosController {
   @Post('registro')
   registro(@Body() dto: CrearUsuarioDto) {
     return this.usuariosService.crear(dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('administrador')
+  @Get('residentes/pendientes')
+  listarPendientes() {
+    return this.usuariosService.listarResidentesPendientes();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('administrador')
+  @Get('residentes')
+  listarTodos() {
+    return this.usuariosService.listarTodosResidentes();
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('administrador')
+  @Patch(':id/estado')
+  aprobarRechazar(
+    @Param('id') id: string,
+    @Body('estado') estado: string,
+    @Body('administrador_id') administrador_id: string,
+  ) {
+    return this.usuariosService.aprobarRechazarResidente(
+      id,
+      estado,
+      administrador_id,
+    );
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

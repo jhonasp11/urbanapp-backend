@@ -14,7 +14,7 @@ export class UsuariosService {
   async crear(dto: CrearUsuarioDto) {
     if (!dto.acepta_terminos || !dto.acepta_privacidad) {
       throw new BadRequestException(
-        'Debes aceptar los términos y condiciones y la política de privacidad',
+        'Debes aceptar los terminos y condiciones y la politica de privacidad',
       );
     }
 
@@ -126,5 +126,56 @@ export class UsuariosService {
     });
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
     return usuario;
+  }
+
+  async listarResidentesPendientes() {
+    return this.prisma.uSUARIOS.findMany({
+      where: { rol: 'residente', estado: 'pendiente' },
+      include: { residente: true },
+      orderBy: { created_at: 'asc' },
+    });
+  }
+
+  async listarTodosResidentes() {
+    return this.prisma.uSUARIOS.findMany({
+      where: { rol: 'residente' },
+      include: { residente: true },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
+  async aprobarRechazarResidente(
+    id: string,
+    estado: string,
+    administrador_id: string,
+  ) {
+    const usuario = await this.prisma.uSUARIOS.findUnique({ where: { id } });
+    if (!usuario) throw new NotFoundException('Usuario no encontrado');
+    if (usuario.rol !== 'residente') {
+      throw new BadRequestException('Solo se pueden aprobar residentes');
+    }
+
+    const usuarioActualizado = await this.prisma.uSUARIOS.update({
+      where: { id },
+      data: { estado },
+    });
+
+    await this.prisma.gESTION_USUARIOS_LOG.create({
+      data: {
+        administrador_id,
+        usuario_afectado_id: id,
+        accion: estado === 'aprobado' ? 'aprobar' : 'rechazar',
+        detalle: JSON.stringify({
+          campo: 'estado',
+          anterior: usuario.estado,
+          nuevo: estado,
+        }),
+      },
+    });
+
+    return {
+      mensaje: `Residente ${estado === 'aprobado' ? 'aprobado' : 'rechazado'} exitosamente`,
+      usuario: usuarioActualizado,
+    };
   }
 }
