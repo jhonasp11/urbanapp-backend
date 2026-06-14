@@ -12,9 +12,10 @@ import { AreasSocialesModule } from './areas-sociales/areas-sociales.module';
 import { ReservasModule } from './reservas/reservas.module';
 import { NotificacionesModule } from './notificaciones/notificaciones.module';
 import { ReportesModule } from './reportes/reportes.module';
+import { DocumentosModule } from './documentos/documentos.module';
 
 @Module({
-  imports: [PrismaModule, UsuariosModule, AuthModule, AlicuotasModule, PagosModule, VisitantesModule, CodigosQrModule, AreasSocialesModule, ReservasModule, NotificacionesModule, ReportesModule],
+  imports: [PrismaModule, UsuariosModule, AuthModule, AlicuotasModule, PagosModule, VisitantesModule, CodigosQrModule, AreasSocialesModule, ReservasModule, NotificacionesModule, ReportesModule, DocumentosModule],
   controllers: [AppController],
   providers: [AppService],
 })
