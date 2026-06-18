@@ -12,11 +12,57 @@ export class ReservasService {
   constructor(private prisma: PrismaService) {}
 
   async crear(dto: CrearReservaDto) {
+    const area = await this.prisma.aREAS_SOCIALES.findUnique({
+      where: { id: dto.area_id },
+    });
+    if (!area) throw new NotFoundException('Area social no encontrada');
+
+    const inicio = new Date(`2000-01-01T${dto.hora_inicio}:00Z`);
+    const fin = new Date(`2000-01-01T${dto.hora_fin}:00Z`);
+    const diffHoras = (fin.getTime() - inicio.getTime()) / (1000 * 60 * 60);
+
+    const nombreArea = area.nombre.toLowerCase();
+    const esFutbolOBasket =
+      nombreArea.includes('futbol') ||
+      nombreArea.includes('fútbol') ||
+      nombreArea.includes('basket');
+    const esEventos = nombreArea.includes('evento');
+
+    if (esFutbolOBasket) {
+      if (diffHoras < 1 || diffHoras > 2) {
+        throw new BadRequestException(
+          'Para futbol y basket la reserva debe ser de 1 o 2 horas',
+        );
+      }
+      const horaInicio = parseInt(dto.hora_inicio.split(':')[0]);
+      const horaFin = parseInt(dto.hora_fin.split(':')[0]);
+      if (horaInicio < 7 || horaFin > 22) {
+        throw new BadRequestException(
+          'Para futbol y basket el horario es de 7:00 a 22:00',
+        );
+      }
+    }
+
+    if (esEventos) {
+      if (diffHoras < 3 || diffHoras > 4) {
+        throw new BadRequestException(
+          'Para el area de eventos la reserva debe ser de 3 o 4 horas',
+        );
+      }
+      const horaInicio = parseInt(dto.hora_inicio.split(':')[0]);
+      const horaFin = parseInt(dto.hora_fin.split(':')[0]);
+      if (horaInicio < 9 || horaFin > 20) {
+        throw new BadRequestException(
+          'Para el area de eventos el horario es de 9:00 a 20:00',
+        );
+      }
+    }
+
     const conflicto = await this.prisma.rESERVAS.findFirst({
       where: {
         area_id: dto.area_id,
         fecha_reserva: new Date(dto.fecha_reserva),
-        hora_inicio: new Date(`2026-01-01T${dto.hora_inicio}:00Z`),
+        hora_inicio: new Date(`2000-01-01T${dto.hora_inicio}:00Z`),
         estado: { in: ['pendiente', 'confirmada'] },
         bloqueo_temporal: true,
       },
@@ -24,12 +70,14 @@ export class ReservasService {
 
     if (conflicto) {
       throw new BadRequestException(
-        'El horario seleccionado no está disponible',
+        'El horario seleccionado no esta disponible',
       );
     }
 
     const bloqueo_hasta = new Date();
     bloqueo_hasta.setMinutes(bloqueo_hasta.getMinutes() + 10);
+
+    const esPago = esEventos;
 
     return this.prisma.rESERVAS.create({
       data: {
@@ -39,8 +87,8 @@ export class ReservasService {
         hora_inicio: new Date(`2000-01-01T${dto.hora_inicio}:00Z`),
         hora_fin: new Date(`2000-01-01T${dto.hora_fin}:00Z`),
         estado: 'pendiente',
-        bloqueo_temporal: true,
-        bloqueo_hasta,
+        bloqueo_temporal: esPago,
+        bloqueo_hasta: esPago ? bloqueo_hasta : null,
       },
     });
   }
@@ -55,7 +103,7 @@ export class ReservasService {
         data: { estado: 'expirada', bloqueo_temporal: false },
       });
       throw new BadRequestException(
-        'El tiempo de bloqueo expiró. La reserva fue liberada',
+        'El tiempo de bloqueo expiro. La reserva fue liberada',
       );
     }
 

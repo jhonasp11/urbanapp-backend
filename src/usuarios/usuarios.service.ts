@@ -29,6 +29,36 @@ export class UsuariosService {
     }
   }
 
+  private validarCedula(cedula: string): void {
+    if (!/^\d{10}$/.test(cedula)) {
+      throw new BadRequestException(
+        'La cedula debe tener exactamente 10 digitos numericos',
+      );
+    }
+
+    const provincia = parseInt(cedula.substring(0, 2));
+    if (provincia < 1 || provincia > 24) {
+      throw new BadRequestException('La cedula no es valida');
+    }
+
+    const digitoVerificador = parseInt(cedula[9]);
+    const coeficientes = [2, 1, 2, 1, 2, 1, 2, 1, 2];
+    let suma = 0;
+
+    for (let i = 0; i < 9; i++) {
+      let valor = parseInt(cedula[i]) * coeficientes[i];
+      if (valor >= 10) valor -= 9;
+      suma += valor;
+    }
+
+    const residuo = suma % 10;
+    const digitoCalculado = residuo === 0 ? 0 : 10 - residuo;
+
+    if (digitoCalculado !== digitoVerificador) {
+      throw new BadRequestException('La cedula ingresada no es valida');
+    }
+  }
+
   async crear(dto: CrearUsuarioDto) {
     if (!dto.acepta_terminos || !dto.acepta_privacidad) {
       throw new BadRequestException(
@@ -37,6 +67,7 @@ export class UsuariosService {
     }
 
     this.validarContrasena(dto.contrasena);
+    this.validarCedula(dto.cedula);
 
     const existente = await this.prisma.uSUARIOS.findFirst({
       where: {

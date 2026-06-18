@@ -37,6 +37,30 @@ export class CodigosQrController {
     );
   }
 
+  @Roles('guardia')
+  @Post('ingreso-manual')
+  registrarIngresoManual(
+    @Body('guardia_id') guardia_id: string,
+    @Body('bitacora_id') bitacora_id: string,
+    @Body('nombre_visitante') nombre_visitante: string,
+    @Body('cedula_visitante') cedula_visitante: string,
+    @Body('placa_vehiculo') placa_vehiculo: string,
+    @Body('nombre_residente') nombre_residente: string,
+    @Body('manzana_destino') manzana_destino: string,
+    @Body('villa_destino') villa_destino: string,
+  ) {
+    return this.codigosQrService.registrarIngresoManual(
+      guardia_id,
+      bitacora_id,
+      nombre_visitante,
+      cedula_visitante,
+      placa_vehiculo,
+      nombre_residente,
+      manzana_destino,
+      villa_destino,
+    );
+  }
+
   @Roles('residente', 'administrador')
   @Get('residente/:residente_id')
   listarPorResidente(@Param('residente_id') residente_id: string) {
