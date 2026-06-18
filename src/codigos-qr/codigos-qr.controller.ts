@@ -1,15 +1,26 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { CodigosQrService } from './codigos-qr.service';
 import { GenerarQrDto } from './dto/generar-qr.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 
+@ApiTags('Codigos QR')
+@ApiBearerAuth('JWT-auth')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('codigos-qr')
 export class CodigosQrController {
   constructor(private readonly codigosQrService: CodigosQrService) {}
 
+  @ApiOperation({ summary: 'Generar codigo QR para visitante' })
+  @ApiResponse({ status: 201, description: 'QR generado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Rango de fechas invalido' })
   @Roles('residente')
   @Post('generar')
   generarQR(@Body() dto: GenerarQrDto) {
@@ -21,6 +32,12 @@ export class CodigosQrController {
     );
   }
 
+  @ApiOperation({ summary: 'Escanear codigo QR — registra ingreso automatico' })
+  @ApiResponse({ status: 201, description: 'Acceso permitido' })
+  @ApiResponse({
+    status: 400,
+    description: 'QR invalido, expirado o bloqueado',
+  })
   @Roles('guardia')
   @Post('escanear')
   escanearQR(
@@ -37,6 +54,17 @@ export class CodigosQrController {
     );
   }
 
+  @ApiOperation({
+    summary: 'Registrar ingreso manual — autorizado por residente via llamada',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Ingreso manual registrado exitosamente',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Residente no encontrado en esa ubicacion',
+  })
   @Roles('guardia')
   @Post('ingreso-manual')
   registrarIngresoManual(
@@ -61,6 +89,8 @@ export class CodigosQrController {
     );
   }
 
+  @ApiOperation({ summary: 'Listar codigos QR de un residente' })
+  @ApiResponse({ status: 200, description: 'Lista de codigos QR' })
   @Roles('residente', 'administrador')
   @Get('residente/:residente_id')
   listarPorResidente(@Param('residente_id') residente_id: string) {
