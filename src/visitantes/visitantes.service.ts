@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CrearVisitanteDto } from './dto/crear-visitante.dto';
 
@@ -6,7 +10,39 @@ import { CrearVisitanteDto } from './dto/crear-visitante.dto';
 export class VisitantesService {
   constructor(private prisma: PrismaService) {}
 
+  private validarCedula(cedula: string): void {
+    if (!/^\d{10}$/.test(cedula)) {
+      throw new BadRequestException(
+        'La cedula debe tener exactamente 10 digitos numericos',
+      );
+    }
+
+    const provincia = parseInt(cedula.substring(0, 2));
+    if (provincia < 1 || provincia > 24) {
+      throw new BadRequestException('La cedula no es valida');
+    }
+
+    const digitoVerificador = parseInt(cedula[9]);
+    const coeficientes = [2, 1, 2, 1, 2, 1, 2, 1, 2];
+    let suma = 0;
+
+    for (let i = 0; i < 9; i++) {
+      let valor = parseInt(cedula[i]) * coeficientes[i];
+      if (valor >= 10) valor -= 9;
+      suma += valor;
+    }
+
+    const residuo = suma % 10;
+    const digitoCalculado = residuo === 0 ? 0 : 10 - residuo;
+
+    if (digitoCalculado !== digitoVerificador) {
+      throw new BadRequestException('La cedula del visitante no es valida');
+    }
+  }
+
   async crear(dto: CrearVisitanteDto) {
+    this.validarCedula(dto.cedula_visitante);
+
     return this.prisma.vISITANTES.create({
       data: {
         residente_id: dto.residente_id,
@@ -15,7 +51,7 @@ export class VisitantesService {
         placa_vehiculo: dto.placa_vehiculo,
         fecha_visita: new Date(dto.fecha_visita),
         hora_estimada_ingreso: new Date(
-          `2026-01-01T${dto.hora_estimada_ingreso}:00Z`,
+          `2000-01-01T${dto.hora_estimada_ingreso}:00Z`,
         ),
         observacion: dto.observacion,
       },
