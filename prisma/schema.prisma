@@ -128,34 +128,35 @@ model ALICUOTAS {
   created_at       DateTime @default(now())
 
   residente RESIDENTES @relation(fields: [residente_id], references: [id])
-  pagos     PAGOS[]
 
   @@unique([residente_id, mes, anio], name: "uq_alicuota_periodo")
+  pagos_alicuotas PAGOS_ALICUOTAS[]
 }
 
 model PAGOS {
-  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  residente_id         String    @db.Uuid
-  alicuota_id          String?   @db.Uuid
-  reserva_id           String?   @db.Uuid
-  tipo_pago            String    @db.VarChar(20)
-  mes_pago             Int
-  anio_pago            Int
-  metodo_pago          String    @db.VarChar(30)
-  banco                String    @db.VarChar(100)
-  comprobante_url      String    @db.VarChar(255)
-  formato_archivo      String    @db.VarChar(5)
-  estado               String    @default("pendiente") @db.VarChar(20)
-  observacion_residente String?  @db.Text
-  observacion_admin    String?   @db.Text
-  validado_por         String?   @db.Uuid
-  fecha_envio          DateTime  @default(now())
-  fecha_validacion     DateTime?
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  residente_id          String    @db.Uuid
+  reserva_id            String?   @db.Uuid
+  tipo_pago             String    @db.VarChar(20)
+  monto_pagado          Decimal   @db.Decimal(10, 2)
+  cantidad_meses        Int?
+  mes_pago              Int
+  anio_pago             Int
+  metodo_pago           String    @db.VarChar(30)
+  banco                 String    @db.VarChar(100)
+  comprobante_url       String    @db.VarChar(255)
+  formato_archivo       String    @db.VarChar(5)
+  estado                String    @default("pendiente") @db.VarChar(20)
+  observacion_residente String?   @db.Text
+  observacion_admin     String?   @db.Text
+  validado_por          String?   @db.Uuid
+  fecha_envio           DateTime  @default(now())
+  fecha_validacion      DateTime?
 
-  residente     RESIDENTES      @relation(fields: [residente_id], references: [id])
-  alicuota      ALICUOTAS?      @relation(fields: [alicuota_id], references: [id])
-  reserva       RESERVAS?       @relation(fields: [reserva_id], references: [id])
-  administrador ADMINISTRADORES? @relation(fields: [validado_por], references: [id])
+  residente        RESIDENTES       @relation(fields: [residente_id], references: [id])
+  reserva          RESERVAS?        @relation(fields: [reserva_id], references: [id])
+  administrador    ADMINISTRADORES? @relation(fields: [validado_por], references: [id])
+  pagos_alicuotas  PAGOS_ALICUOTAS[]
 }
 
 model NOTIFICACIONES {
@@ -175,6 +176,7 @@ model VISITANTES {
   residente_id          String   @db.Uuid
   nombre_visitante      String   @db.VarChar(150)
   cedula_visitante      String   @db.VarChar(20)
+  placa_vehiculo        String?  @db.VarChar(10)
   fecha_visita          DateTime @db.Date
   hora_estimada_ingreso DateTime @db.Time
   observacion           String?  @db.Text
@@ -191,7 +193,8 @@ model CODIGOS_QR {
   residente_id     String   @db.Uuid
   codigo_hash      String   @unique @db.VarChar(255)
   estado           String   @default("activo") @db.VarChar(20)
-  fecha_expiracion DateTime
+  fecha_inicio     DateTime
+  fecha_fin        DateTime
   intentos_fallidos Int     @default(0)
   created_at       DateTime @default(now())
 
@@ -222,20 +225,23 @@ model BITACORA_TURNOS {
 
 model INGRESOS {
   id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  codigo_qr_id          String   @db.Uuid
-  visitante_id          String   @db.Uuid
+  codigo_qr_id          String?  @db.Uuid
+  visitante_id          String?  @db.Uuid
   residente_id          String   @db.Uuid
   guardia_id            String   @db.Uuid
   bitacora_id           String   @db.Uuid
   nombre_visitante      String   @db.VarChar(150)
+  cedula_visitante      String?  @db.VarChar(20)
+  placa_vehiculo        String?  @db.VarChar(10)
   manzana_destino       String   @db.VarChar(10)
   villa_destino         String   @db.VarChar(10)
   hora_ingreso          DateTime @default(now())
+  tipo_ingreso          String   @default("automatico") @db.VarChar(20)
   estado                String   @db.VarChar(20)
   observacion_incidencia String? @db.Text
 
-  codigo_qr CODIGOS_QR      @relation(fields: [codigo_qr_id], references: [id])
-  visitante VISITANTES      @relation(fields: [visitante_id], references: [id])
+  codigo_qr CODIGOS_QR?     @relation(fields: [codigo_qr_id], references: [id])
+  visitante VISITANTES?     @relation(fields: [visitante_id], references: [id])
   residente RESIDENTES      @relation(fields: [residente_id], references: [id])
   guardia   GUARDIAS        @relation(fields: [guardia_id], references: [id])
   bitacora  BITACORA_TURNOS @relation(fields: [bitacora_id], references: [id])
@@ -316,4 +322,15 @@ model GESTION_USUARIOS_LOG {
 
   administrador     ADMINISTRADORES @relation(fields: [administrador_id], references: [id])
   usuario_afectado  USUARIOS        @relation(fields: [usuario_afectado_id], references: [id])
+}
+
+model PAGOS_ALICUOTAS {
+  id          String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pago_id     String @db.Uuid
+  alicuota_id String @db.Uuid
+
+  pago     PAGOS     @relation(fields: [pago_id], references: [id])
+  alicuota ALICUOTAS @relation(fields: [alicuota_id], references: [id])
+
+  @@unique([pago_id, alicuota_id], name: "uq_pago_alicuota")
 }

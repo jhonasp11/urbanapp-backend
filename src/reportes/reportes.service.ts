@@ -9,125 +9,131 @@ const PDFDocument = require('pdfkit');
 export class ReportesService {
   constructor(private prisma: PrismaService) {}
 
-async generarReportePagos(
-  administrador_id: string,
-  mes?: number,
-  anio?: number,
-  res?: Response,
-) {
-  const where: any = {};
-  if (mes) where.mes_pago = mes;
-  if (anio) where.anio_pago = anio;
+  async generarReportePagos(
+    administrador_id: string,
+    mes?: number,
+    anio?: number,
+    res?: Response,
+  ) {
+    const where: any = {};
+    if (mes) where.mes_pago = mes;
+    if (anio) where.anio_pago = anio;
 
-  const pagos = await this.prisma.pAGOS.findMany({
-    where,
-    include: {
-      residente: {
-        include: {
-          usuario: { select: { nombres: true, apellidos: true, cedula: true } },
+    const pagos = await this.prisma.pAGOS.findMany({
+      where,
+      include: {
+        residente: {
+          include: {
+            usuario: { select: { nombres: true, apellidos: true, cedula: true } },
+          },
+        },
+        pagos_alicuotas: {
+          include: { alicuota: true },
         },
       },
-      alicuota: true,
-    },
-    orderBy: { fecha_envio: 'desc' },
-  });
-
-  const pagosAprobados = pagos.filter((p) => p.estado === 'aprobado');
-  const pagosPendientes = pagos.filter((p) => p.estado === 'pendiente');
-  const pagosRechazados = pagos.filter((p) => p.estado === 'rechazado');
-
-  const totalRecaudado = pagosAprobados.reduce(
-    (sum, p) => sum + (p.alicuota ? Number(p.alicuota.monto) : 0),
-    0,
-  );
-  const totalPendiente = pagosPendientes.reduce(
-    (sum, p) => sum + (p.alicuota ? Number(p.alicuota.monto) : 0),
-    0,
-  );
-
-  await this.prisma.rEPORTES.create({
-    data: {
-      administrador_id,
-      tipo: 'pagos',
-      mes: mes ?? null,
-      anio: anio ?? null,
-      total_registros: pagos.length,
-    },
-  });
-
-  const doc = new PDFDocument({ margin: 50 });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename=reporte_pagos_${mes ?? 'todos'}_${anio ?? 'todos'}.pdf`,
-  );
-  doc.pipe(res);
-
-  doc.fontSize(20).text('UrbanApp - Reporte de Pagos', { align: 'center' });
-  doc.moveDown();
-  doc.fontSize(12).text(`Generado: ${new Date().toLocaleDateString('es-EC')}`);
-  if (mes && anio) doc.text(`Periodo: ${mes}/${anio}`);
-  doc.text(`Total registros: ${pagos.length}`);
-  doc.moveDown();
-
-  doc.fontSize(14).text('PAGOS RECIBIDOS', { underline: true });
-  doc.moveDown(0.5);
-  doc.fontSize(10);
-  if (pagosAprobados.length === 0) {
-    doc.text('Sin pagos aprobados en este periodo.');
-  } else {
-    pagosAprobados.forEach((pago, index) => {
-      const monto = pago.alicuota ? Number(pago.alicuota.monto).toFixed(2) : '0.00';
-      doc.text(
-        `${index + 1}. ${pago.residente.usuario.nombres} ${pago.residente.usuario.apellidos} | ` +
-        `Cedula: ${pago.residente.usuario.cedula} | ` +
-        `Monto: $${monto} | ` +
-        `Fecha: ${new Date(pago.fecha_envio).toLocaleDateString('es-EC')}`,
-      );
-      doc.moveDown(0.3);
+      orderBy: { fecha_envio: 'desc' },
     });
-  }
-  doc.moveDown(0.3);
-  doc.fontSize(11).text(`Total recaudado: $${totalRecaudado.toFixed(2)}`, { bold: true });
-  doc.moveDown();
 
-  doc.fontSize(14).text('PAGOS PENDIENTES', { underline: true });
-  doc.moveDown(0.5);
-  doc.fontSize(10);
-  if (pagosPendientes.length === 0) {
-    doc.text('Sin pagos pendientes en este periodo.');
-  } else {
-    pagosPendientes.forEach((pago, index) => {
-      const monto = pago.alicuota ? Number(pago.alicuota.monto).toFixed(2) : '0.00';
-      doc.text(
-        `${index + 1}. ${pago.residente.usuario.nombres} ${pago.residente.usuario.apellidos} | ` +
-        `Cedula: ${pago.residente.usuario.cedula} | ` +
-        `Monto: $${monto} - pendiente | ` +
-        `Fecha: ${new Date(pago.fecha_envio).toLocaleDateString('es-EC')}`,
-      );
-      doc.moveDown(0.3);
+    const pagosAprobados = pagos.filter((p) => p.estado === 'aprobado');
+    const pagosPendientes = pagos.filter((p) => p.estado === 'pendiente');
+    const pagosRechazados = pagos.filter((p) => p.estado === 'rechazado');
+
+    const totalRecaudado = pagosAprobados.reduce(
+      (sum, p) => sum + Number(p.monto_pagado),
+      0,
+    );
+    const totalPendiente = pagosPendientes.reduce(
+      (sum, p) => sum + Number(p.monto_pagado),
+      0,
+    );
+
+    await this.prisma.rEPORTES.create({
+      data: {
+        administrador_id,
+        tipo: 'pagos',
+        mes: mes ?? null,
+        anio: anio ?? null,
+        total_registros: pagos.length,
+      },
     });
-  }
-  doc.moveDown(0.3);
-  doc.fontSize(11).text(`Total pendiente: $${totalPendiente.toFixed(2)}`, { bold: true });
 
-  if (pagosRechazados.length > 0) {
+    const doc = new PDFDocument({ margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=reporte_pagos_${mes ?? 'todos'}_${anio ?? 'todos'}.pdf`,
+    );
+    doc.pipe(res);
+
+    doc.fontSize(20).text('UrbanApp - Reporte de Pagos', { align: 'center' });
     doc.moveDown();
-    doc.fontSize(14).text('PAGOS RECHAZADOS', { underline: true });
+    doc.fontSize(12).text(`Generado: ${new Date().toLocaleDateString('es-EC')}`);
+    if (mes && anio) doc.text(`Periodo: ${mes}/${anio}`);
+    doc.text(`Total registros: ${pagos.length}`);
+    doc.moveDown();
+
+    doc.fontSize(14).text('PAGOS RECIBIDOS', { underline: true });
     doc.moveDown(0.5);
     doc.fontSize(10);
-    pagosRechazados.forEach((pago, index) => {
-      doc.text(
-        `${index + 1}. ${pago.residente.usuario.nombres} ${pago.residente.usuario.apellidos} | ` +
-        `Cedula: ${pago.residente.usuario.cedula} | ` +
-        `Motivo: ${pago.observacion_admin ?? 'Sin observacion'}`,
-      );
-      doc.moveDown(0.3);
-    });
-  }
+    if (pagosAprobados.length === 0) {
+      doc.text('Sin pagos aprobados en este periodo.');
+    } else {
+      pagosAprobados.forEach((pago, index) => {
+        const monto = Number(pago.monto_pagado).toFixed(2);
+        const meses = pago.pagos_alicuotas.map((pa) => `${pa.alicuota.mes}/${pa.alicuota.anio}`).join(', ');
+        doc.text(
+          `${index + 1}. ${pago.residente.usuario.nombres} ${pago.residente.usuario.apellidos} | ` +
+          `Cedula: ${pago.residente.usuario.cedula} | ` +
+          `Monto: $${monto} | ` +
+          `Meses: ${meses || pago.tipo_pago} | ` +
+          `Fecha: ${new Date(pago.fecha_envio).toLocaleDateString('es-EC')}`,
+        );
+        doc.moveDown(0.3);
+      });
+    }
+    doc.moveDown(0.3);
+    doc.fontSize(11).text(`Total recaudado: $${totalRecaudado.toFixed(2)}`, { bold: true });
+    doc.moveDown();
 
-  doc.end();
-}
+    doc.fontSize(14).text('PAGOS PENDIENTES', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10);
+    if (pagosPendientes.length === 0) {
+      doc.text('Sin pagos pendientes en este periodo.');
+    } else {
+      pagosPendientes.forEach((pago, index) => {
+        const monto = Number(pago.monto_pagado).toFixed(2);
+        const meses = pago.pagos_alicuotas.map((pa) => `${pa.alicuota.mes}/${pa.alicuota.anio}`).join(', ');
+        doc.text(
+          `${index + 1}. ${pago.residente.usuario.nombres} ${pago.residente.usuario.apellidos} | ` +
+          `Cedula: ${pago.residente.usuario.cedula} | ` +
+          `Monto: $${monto} - pendiente | ` +
+          `Meses: ${meses || pago.tipo_pago} | ` +
+          `Fecha: ${new Date(pago.fecha_envio).toLocaleDateString('es-EC')}`,
+        );
+        doc.moveDown(0.3);
+      });
+    }
+    doc.moveDown(0.3);
+    doc.fontSize(11).text(`Total pendiente: $${totalPendiente.toFixed(2)}`, { bold: true });
+
+    if (pagosRechazados.length > 0) {
+      doc.moveDown();
+      doc.fontSize(14).text('PAGOS RECHAZADOS', { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(10);
+      pagosRechazados.forEach((pago, index) => {
+        doc.text(
+          `${index + 1}. ${pago.residente.usuario.nombres} ${pago.residente.usuario.apellidos} | ` +
+          `Cedula: ${pago.residente.usuario.cedula} | ` +
+          `Motivo: ${pago.observacion_admin ?? 'Sin observacion'}`,
+        );
+        doc.moveDown(0.3);
+      });
+    }
+
+    doc.end();
+  }
 
   async generarReporteAccesos(
     administrador_id: string,
@@ -166,20 +172,16 @@ async generarReportePagos(
     });
 
     const doc = new PDFDocument({ margin: 50 });
-
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename=reporte_accesos.pdf`,
     );
-
     doc.pipe(res);
 
     doc.fontSize(20).text('UrbanApp - Reporte de Accesos', { align: 'center' });
     doc.moveDown();
-    doc
-      .fontSize(12)
-      .text(`Generado: ${new Date().toLocaleDateString('es-EC')}`);
+    doc.fontSize(12).text(`Generado: ${new Date().toLocaleDateString('es-EC')}`);
     if (fecha_desde && fecha_hasta) {
       doc.text(`Periodo: ${fecha_desde} al ${fecha_hasta}`);
     }
@@ -190,10 +192,12 @@ async generarReportePagos(
     ingresos.forEach((ingreso, index) => {
       doc.text(
         `${index + 1}. Visitante: ${ingreso.nombre_visitante} | ` +
-          `Destino: Mz. ${ingreso.manzana_destino} Villa ${ingreso.villa_destino} | ` +
-          `Hora: ${new Date(ingreso.hora_ingreso).toLocaleString('es-EC')} | ` +
-          `Estado: ${ingreso.estado} | ` +
-          `Guardia: ${ingreso.guardia.usuario.nombres}`,
+        `Cedula: ${ingreso.cedula_visitante ?? 'N/A'} | ` +
+        `Placa: ${ingreso.placa_vehiculo ?? 'N/A'} | ` +
+        `Destino: Mz. ${ingreso.manzana_destino} Villa ${ingreso.villa_destino} | ` +
+        `Hora: ${new Date(ingreso.hora_ingreso).toLocaleString('es-EC')} | ` +
+        `Tipo: ${ingreso.tipo_ingreso} | ` +
+        `Guardia: ${ingreso.guardia.usuario.nombres}`,
       );
       doc.moveDown(0.3);
     });
@@ -202,99 +206,72 @@ async generarReportePagos(
   }
 
   async generarReporteReservas(
-  administrador_id: string,
-  mes?: number,
-  anio?: number,
-  res?: Response,
+    administrador_id: string,
+    mes?: number,
+    anio?: number,
+    res?: Response,
   ) {
-  const where: any = {};
-  if (mes && anio) {
-    const fechaInicio = new Date(anio, mes - 1, 1);
-    const fechaFin = new Date(anio, mes, 0);
-    where.fecha_reserva = { gte: fechaInicio, lte: fechaFin };
-  }
-  where.estado = 'confirmada';
+    const where: any = {};
+    if (mes && anio) {
+      const fechaInicio = new Date(anio, mes - 1, 1);
+      const fechaFin = new Date(anio, mes, 0);
+      where.fecha_reserva = { gte: fechaInicio, lte: fechaFin };
+    }
+    where.estado = 'confirmada';
 
-  const reservas = await this.prisma.rESERVAS.findMany({
-    where,
-    include: {
-      area: true,
-      residente: {
-        include: {
-          usuario: { select: { nombres: true, apellidos: true } },
+    const reservas = await this.prisma.rESERVAS.findMany({
+      where,
+      include: {
+        area: true,
+        residente: {
+          include: {
+            usuario: { select: { nombres: true, apellidos: true } },
+          },
         },
       },
-    },
-    orderBy: { fecha_reserva: 'desc' },
-  });
+      orderBy: { fecha_reserva: 'desc' },
+    });
 
-  await this.prisma.rEPORTES.create({
-    data: {
-      administrador_id,
-      tipo: 'reservas_areas',
-      mes: mes ?? null,
-      anio: anio ?? null,
-      total_registros: reservas.length,
-    },
-  });
+    await this.prisma.rEPORTES.create({
+      data: {
+        administrador_id,
+        tipo: 'reservas_areas',
+        mes: mes ?? null,
+        anio: anio ?? null,
+        total_registros: reservas.length,
+      },
+    });
 
-  const reservasPorArea: Record<string, { nombre: string; reservas: typeof reservas; total: number }> = {};
-  reservas.forEach((reserva) => {
-    const areaId = reserva.area_id;
-    if (!reservasPorArea[areaId]) {
-      reservasPorArea[areaId] = {
-        nombre: reserva.area.nombre,
-        reservas: [],
-        total: 0,
-      };
-    }
-    reservasPorArea[areaId].reservas.push(reserva);
-    reservasPorArea[areaId].total += Number(reserva.area.tarifa_reserva);
-  });
+    const doc = new PDFDocument({ margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=reporte_reservas_${mes ?? 'todos'}_${anio ?? 'todos'}.pdf`,
+    );
+    doc.pipe(res);
 
-  const totalGeneral = reservas.reduce(
-    (sum, r) => sum + Number(r.area.tarifa_reserva),
-    0,
-  );
+    doc.fontSize(20).text('UrbanApp - Reporte de Reservas', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Generado: ${new Date().toLocaleDateString('es-EC')}`);
+    if (mes && anio) doc.text(`Periodo: ${mes}/${anio}`);
+    doc.text(`Total reservas confirmadas: ${reservas.length}`);
+    doc.moveDown();
 
-  const doc = new PDFDocument({ margin: 50 });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader(
-    'Content-Disposition',
-    `attachment; filename=reporte_reservas_${mes ?? 'todos'}_${anio ?? 'todos'}.pdf`,
-  );
-  doc.pipe(res);
-
-  doc.fontSize(20).text('UrbanApp - Reporte de Reservas', { align: 'center' });
-  doc.moveDown();
-  doc.fontSize(12).text(`Generado: ${new Date().toLocaleDateString('es-EC')}`);
-  if (mes && anio) doc.text(`Periodo: ${mes}/${anio}`);
-  doc.text(`Total reservas confirmadas: ${reservas.length}`);
-  doc.text(`Total recaudado general: $${totalGeneral.toFixed(2)}`);
-  doc.moveDown();
-
-  if (Object.keys(reservasPorArea).length === 0) {
-    doc.fontSize(12).text('Sin reservas confirmadas en este periodo.');
-  } else {
-    Object.values(reservasPorArea).forEach((grupo) => {
-      doc.fontSize(14).text(`AREA: ${grupo.nombre.toUpperCase()}`, { underline: true });
-      doc.moveDown(0.5);
+    if (reservas.length === 0) {
+      doc.fontSize(12).text('Sin reservas confirmadas en este periodo.');
+    } else {
       doc.fontSize(10);
-      grupo.reservas.forEach((reserva, index) => {
+      reservas.forEach((reserva, index) => {
         doc.text(
           `${index + 1}. ${reserva.residente.usuario.nombres} ${reserva.residente.usuario.apellidos} | ` +
+          `Area: ${reserva.area.nombre} | ` +
           `Fecha: ${new Date(reserva.fecha_reserva).toLocaleDateString('es-EC')} | ` +
-          `Tarifa: $${Number(reserva.area.tarifa_reserva).toFixed(2)}`,
+          `Estado: ${reserva.estado}`,
         );
         doc.moveDown(0.3);
       });
-      doc.moveDown(0.3);
-      doc.fontSize(11).text(`Total recaudado ${grupo.nombre}: $${grupo.total.toFixed(2)}`, { bold: true });
-      doc.moveDown();
-    });
-  }
+    }
 
-  doc.end();
-}
-  
+    doc.end();
+  }
 }

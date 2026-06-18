@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { CodigosQrService } from './codigos-qr.service';
+import { GenerarQrDto } from './dto/generar-qr.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -11,11 +12,13 @@ export class CodigosQrController {
 
   @Roles('residente')
   @Post('generar')
-  generarQR(
-    @Body('visitante_id') visitante_id: string,
-    @Body('residente_id') residente_id: string,
-  ) {
-    return this.codigosQrService.generarQR(visitante_id, residente_id);
+  generarQR(@Body() dto: GenerarQrDto) {
+    return this.codigosQrService.generarQR(
+      dto.visitante_id,
+      dto.residente_id,
+      dto.fecha_inicio,
+      dto.fecha_fin,
+    );
   }
 
   @Roles('guardia')
@@ -24,8 +27,14 @@ export class CodigosQrController {
     @Body('codigo_hash') codigo_hash: string,
     @Body('guardia_id') guardia_id: string,
     @Body('bitacora_id') bitacora_id: string,
+    @Body('placa_vehiculo') placa_vehiculo?: string,
   ) {
-    return this.codigosQrService.escanearQR(codigo_hash, guardia_id, bitacora_id);
+    return this.codigosQrService.escanearQR(
+      codigo_hash,
+      guardia_id,
+      bitacora_id,
+      placa_vehiculo,
+    );
   }
 
   @Roles('residente', 'administrador')

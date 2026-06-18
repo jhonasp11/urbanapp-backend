@@ -11,12 +11,32 @@ import * as bcrypt from 'bcrypt';
 export class UsuariosService {
   constructor(private prisma: PrismaService) {}
 
+  private validarContrasena(contrasena: string): void {
+    if (contrasena.length < 8) {
+      throw new BadRequestException(
+        'La contrasena debe tener minimo 8 caracteres',
+      );
+    }
+    if (!/\d/.test(contrasena)) {
+      throw new BadRequestException(
+        'La contrasena debe contener al menos un numero',
+      );
+    }
+    if (!/[!@#$%^&*()_+\-={};"\\|,.<>/?]/.test(contrasena)) {
+      throw new BadRequestException(
+        'La contrasena debe contener al menos un caracter especial',
+      );
+    }
+  }
+
   async crear(dto: CrearUsuarioDto) {
     if (!dto.acepta_terminos || !dto.acepta_privacidad) {
       throw new BadRequestException(
         'Debes aceptar los terminos y condiciones y la politica de privacidad',
       );
     }
+
+    this.validarContrasena(dto.contrasena);
 
     const existente = await this.prisma.uSUARIOS.findFirst({
       where: {
