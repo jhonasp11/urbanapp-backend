@@ -6,21 +6,23 @@ import { join } from 'path';
 @Injectable()
 export class FirebaseService implements OnModuleInit {
   onModuleInit() {
-    if (!admin.apps.length) {
-      // Leer el archivo como objeto mutable
-      const serviceAccount = JSON.parse(
-        readFileSync(
-          join(process.cwd(), 'firebase-service-account.json'),
-          'utf8',
-        ),
-      );
+    if (admin.apps.length) return;
 
-      admin.initializeApp({
-        credential: admin.credential.cert(
-          serviceAccount as admin.ServiceAccount,
-        ),
-      });
-    }
+    // En producción se inyecta el JSON completo por variable de entorno
+    const credencialEnv = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+    const serviceAccount = credencialEnv
+      ? JSON.parse(credencialEnv)
+      : JSON.parse(
+          readFileSync(
+            join(process.cwd(), 'firebase-service-account.json'),
+            'utf8',
+          ),
+        );
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+    });
   }
 
   async enviarNotificacion(token: string, titulo: string, mensaje: string) {

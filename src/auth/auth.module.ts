@@ -15,7 +15,7 @@ import { MailModule } from '../mail/mail.module';
     PrismaModule,
     MailModule,
     JwtModule.register({
-      secret: 'urbanapp_secret_key',
+      secret: process.env.JWT_SECRET ?? 'urbanapp_secret_key',
       signOptions: { expiresIn: '8h' },
     }),
   ],
