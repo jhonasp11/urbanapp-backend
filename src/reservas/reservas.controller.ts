@@ -39,13 +39,26 @@ export class ReservasController {
     return this.reservasService.crear(dto);
   }
 
-  @ApiOperation({ summary: 'Confirmar reserva pendiente de pago' })
-  @ApiResponse({ status: 200, description: 'Reserva confirmada' })
-  @ApiResponse({ status: 400, description: 'Bloqueo temporal expirado' })
+  @ApiOperation({
+    summary: 'Marcar reserva de salón como pagada (tras subir comprobante)',
+  })
+  @ApiResponse({ status: 200, description: 'Reserva marcada como pagada' })
+  @ApiResponse({ status: 400, description: 'El tiempo de pago expiró' })
   @Roles('residente')
-  @Patch(':id/confirmar')
-  confirmar(@Param('id') id: string) {
-    return this.reservasService.confirmar(id);
+  @Patch(':id/pagada')
+  pagada(@Param('id') id: string) {
+    return this.reservasService.marcarPagada(id);
+  }
+
+  @ApiOperation({ summary: 'Cancelar reserva por residente' })
+  @ApiResponse({ status: 200, description: 'Reserva cancelada' })
+  @Roles('residente')
+  @Patch(':id/cancelar')
+  cancelar(
+    @Param('id') id: string,
+    @Body('residente_id') residente_id: string,
+  ) {
+    return this.reservasService.cancelar(id, residente_id);
   }
 
   @ApiOperation({ summary: 'Listar reservas de un residente' })
