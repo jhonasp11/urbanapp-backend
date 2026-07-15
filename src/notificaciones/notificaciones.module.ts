@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { NotificacionesService } from './notificaciones.service';
 import { NotificacionesController } from './notificaciones.controller';
-import { FirebaseService } from './firebase.service';
+import { NotificacionesService } from './notificaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { FirebaseService } from './firebase.service';
 
 @Module({
   controllers: [NotificacionesController],

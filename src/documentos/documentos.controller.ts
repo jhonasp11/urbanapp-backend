@@ -6,25 +6,61 @@ import {
   Body,
   Param,
   UseGuards,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 import { DocumentosService } from './documentos.service';
 import { CrearDocumentoDto } from './dto/crear-documento.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @ApiTags('Documentos')
 @ApiBearerAuth('JWT-auth')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('documentos')
 export class DocumentosController {
-  constructor(private readonly documentosService: DocumentosService) {}
+  constructor(
+    private readonly documentosService: DocumentosService,
+    private readonly cloudinary: CloudinaryService,
+  ) {}
+
+  @ApiOperation({ summary: 'Subir el archivo PDF del documento' })
+  @ApiResponse({ status: 201, description: 'PDF subido, devuelve URL' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        archivo: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @Roles('administrador')
+  @Post('archivo')
+  @UseInterceptors(FileInterceptor('archivo'))
+  async subirArchivo(@UploadedFile() archivo: Express.Multer.File) {
+    if (!archivo) {
+      throw new BadRequestException('No se recibió ningún archivo');
+    }
+    const url = await this.cloudinary.subirArchivo(
+      archivo.buffer,
+      'urbanapp/documentos',
+      true, // es PDF
+    );
+    return { archivo_url: url };
+  }
 
   @ApiOperation({ summary: 'Subir nuevo documento o reglamento' })
   @ApiResponse({ status: 201, description: 'Documento creado exitosamente' })
