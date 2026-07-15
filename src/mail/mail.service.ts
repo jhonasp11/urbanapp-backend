@@ -4,11 +4,15 @@ import * as nodemailer from 'nodemailer';
 @Injectable()
 export class MailService {
   private transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // STARTTLS
     auth: {
       user: process.env.MAIL_USER,
       pass: process.env.MAIL_PASS,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
   });
 
   async enviarCodigoRecuperacion(
