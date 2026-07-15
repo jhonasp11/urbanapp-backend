@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -26,7 +27,10 @@ export class VisitantesController {
   constructor(private readonly visitantesService: VisitantesService) {}
 
   @ApiOperation({ summary: 'Registrar nuevo visitante con cedula y placa' })
-  @ApiResponse({ status: 201, description: 'Visitante registrado exitosamente' })
+  @ApiResponse({
+    status: 201,
+    description: 'Visitante registrado exitosamente',
+  })
   @ApiResponse({ status: 400, description: 'Cedula del visitante no valida' })
   @Roles('residente')
   @Post()
@@ -40,6 +44,14 @@ export class VisitantesController {
   @Get('residente/:residente_id')
   listarPorResidente(@Param('residente_id') residente_id: string) {
     return this.visitantesService.listarPorResidente(residente_id);
+  }
+
+  @ApiOperation({ summary: 'Eliminar visitante guardado (quita de guardados)' })
+  @ApiResponse({ status: 200, description: 'Visitante quitado de guardados' })
+  @Roles('residente')
+  @Patch(':id/eliminar-guardado')
+  eliminarGuardado(@Param('id') id: string) {
+    return this.visitantesService.eliminarGuardado(id);
   }
 
   @ApiOperation({ summary: 'Buscar visitante por ID' })

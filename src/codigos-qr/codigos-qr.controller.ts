@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Patch,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -32,22 +41,30 @@ export class CodigosQrController {
     );
   }
 
-  @ApiOperation({ summary: 'Escanear codigo QR — registra ingreso automatico' })
-  @ApiResponse({ status: 201, description: 'Acceso permitido' })
+  @ApiOperation({ summary: 'Validar codigo QR (paso 1, no crea ingreso)' })
+  @ApiResponse({ status: 201, description: 'QR valido' })
   @ApiResponse({
     status: 400,
     description: 'QR invalido, expirado o bloqueado',
   })
   @Roles('guardia')
-  @Post('escanear')
-  escanearQR(
-    @Body('codigo_hash') codigo_hash: string,
+  @Post('validar')
+  validarQR(@Body('codigo_hash') codigo_hash: string) {
+    return this.codigosQrService.validarQR(codigo_hash);
+  }
+
+  @ApiOperation({ summary: 'Confirmar ingreso automatico (paso 2, con placa)' })
+  @ApiResponse({ status: 201, description: 'Acceso permitido' })
+  @Roles('guardia')
+  @Post('confirmar-ingreso')
+  confirmarIngresoAutomatico(
+    @Body('codigo_qr_id') codigo_qr_id: string,
     @Body('guardia_id') guardia_id: string,
     @Body('bitacora_id') bitacora_id: string,
-    @Body('placa_vehiculo') placa_vehiculo?: string,
+    @Body('placa_vehiculo') placa_vehiculo: string,
   ) {
-    return this.codigosQrService.escanearQR(
-      codigo_hash,
+    return this.codigosQrService.confirmarIngresoAutomatico(
+      codigo_qr_id,
       guardia_id,
       bitacora_id,
       placa_vehiculo,
@@ -55,7 +72,7 @@ export class CodigosQrController {
   }
 
   @ApiOperation({
-    summary: 'Registrar ingreso manual — autorizado por residente via llamada',
+    summary: 'Registrar ingreso manual - autorizado por residente via llamada',
   })
   @ApiResponse({
     status: 201,
@@ -89,11 +106,52 @@ export class CodigosQrController {
     );
   }
 
+  @ApiOperation({ summary: 'Listar ingresos por fecha' })
+  @ApiResponse({ status: 200, description: 'Lista de ingresos' })
+  @Roles('guardia', 'administrador')
+  @Get('ingresos')
+  listarIngresos(
+    @Query('fecha') fecha?: string,
+    @Query('guardia_id') guardia_id?: string,
+    @Query('fecha_hasta') fecha_hasta?: string,
+  ) {
+    return this.codigosQrService.listarIngresos(fecha, guardia_id, fecha_hasta);
+  }
+
   @ApiOperation({ summary: 'Listar codigos QR de un residente' })
   @ApiResponse({ status: 200, description: 'Lista de codigos QR' })
   @Roles('residente', 'administrador')
   @Get('residente/:residente_id')
   listarPorResidente(@Param('residente_id') residente_id: string) {
     return this.codigosQrService.listarPorResidente(residente_id);
+  }
+
+  @ApiOperation({ summary: 'Registrar reporte de incidencia' })
+  @ApiResponse({ status: 201, description: 'Reporte registrado' })
+  @Roles('guardia')
+  @Post('reporte-incidencia')
+  registrarReporteIncidencia(
+    @Body('guardia_id') guardia_id: string,
+    @Body('observacion_incidencia') observacion_incidencia: string,
+    @Body('hora_ingreso') hora_ingreso: string,
+    @Body('bitacora_id') bitacora_id: string,
+  ) {
+    return this.codigosQrService.registrarReporteIncidencia(
+      guardia_id,
+      observacion_incidencia,
+      hora_ingreso,
+      bitacora_id,
+    );
+  }
+
+  @ApiOperation({ summary: 'Anular codigo QR' })
+  @ApiResponse({ status: 200, description: 'Codigo QR anulado' })
+  @Roles('residente')
+  @Patch(':id/anular')
+  anularQR(
+    @Param('id') id: string,
+    @Body('residente_id') residente_id: string,
+  ) {
+    return this.codigosQrService.anularQR(id, residente_id);
   }
 }

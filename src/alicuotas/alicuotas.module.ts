@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AlicuotasService } from './alicuotas.service';
 import { AlicuotasController } from './alicuotas.controller';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Module({
-  providers: [AlicuotasService],
-  controllers: [AlicuotasController]
+  controllers: [AlicuotasController],
+  providers: [AlicuotasService, PrismaService],
+  exports: [AlicuotasService],
 })
 export class AlicuotasModule {}
