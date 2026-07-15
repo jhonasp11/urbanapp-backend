@@ -1,5 +1,10 @@
+/* eslint-disable */
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+
+interface RequestWithUser {
+  user: { rol: string };
+}
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -12,7 +17,7 @@ export class RolesGuard implements CanActivate {
     );
     if (!rolesRequeridos) return true;
 
-    const { user } = context.switchToHttp().getRequest();
-    return rolesRequeridos.includes(user.rol);
+    const request = context.switchToHttp().getRequest<RequestWithUser>();
+    return rolesRequeridos.includes(request.user.rol);
   }
 }

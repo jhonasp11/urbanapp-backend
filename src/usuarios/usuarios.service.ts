@@ -1,3 +1,4 @@
+/// <reference types="multer" />
 import {
   Injectable,
   BadRequestException,
@@ -5,11 +6,18 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
+import { MailService } from '../mail/mail.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import * as bcrypt from 'bcrypt';
+import { ahoraEcuadorLiteral } from '../common/fecha-ecuador';
 
 @Injectable()
 export class UsuariosService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cloudinary: CloudinaryService,
+    private mail: MailService,
+  ) {}
 
   private validarContrasena(contrasena: string): void {
     if (contrasena.length < 8) {
@@ -59,6 +67,7 @@ export class UsuariosService {
     }
   }
 
+  //Lógica de creación de usuario
   async crear(dto: CrearUsuarioDto) {
     if (!dto.acepta_terminos || !dto.acepta_privacidad) {
       throw new BadRequestException(
@@ -69,90 +78,220 @@ export class UsuariosService {
     this.validarContrasena(dto.contrasena);
     this.validarCedula(dto.cedula);
 
-    const existente = await this.prisma.uSUARIOS.findFirst({
-      where: {
-        OR: [
-          { cedula: dto.cedula },
-          { correo: dto.correo },
-          { usuario: dto.usuario },
-        ],
-      },
+    const existenteCedula = await this.prisma.uSUARIOS.findFirst({
+      where: { cedula: dto.cedula },
     });
+    if (existenteCedula)
+      throw new BadRequestException('Ya existe un usuario con esa cédula');
 
-    if (existente) {
-      throw new BadRequestException('Ya existe un usuario con esos datos');
+    const existenteCorreo = await this.prisma.uSUARIOS.findFirst({
+      where: { correo: dto.correo },
+    });
+    if (existenteCorreo)
+      throw new BadRequestException('Ya existe un usuario con ese correo');
+
+    const existenteTelefono = await this.prisma.uSUARIOS.findFirst({
+      where: { telefono: dto.telefono },
+    });
+    if (existenteTelefono)
+      throw new BadRequestException('Ya existe un usuario con ese teléfono');
+
+    const existenteUsuario = await this.prisma.uSUARIOS.findFirst({
+      where: { usuario: dto.usuario },
+    });
+    if (existenteUsuario)
+      throw new BadRequestException(
+        'Ya existe un usuario con ese nombre de usuario',
+      );
+
+    if (dto.rol === 'guardia' && dto.id_guardia) {
+      const existenteGuardia = await this.prisma.gUARDIAS.findFirst({
+        where: { id_guardia: dto.id_guardia },
+      });
+      if (existenteGuardia)
+        throw new BadRequestException(
+          'Ya existe un guardia con ese ID externo',
+        );
+    }
+
+    if (dto.rol === 'administrador' && dto.id_administrador) {
+      const existenteAdmin = await this.prisma.aDMINISTRADORES.findFirst({
+        where: { id_administrador: dto.id_administrador },
+      });
+      if (existenteAdmin)
+        throw new BadRequestException(
+          'Ya existe un administrador con ese ID externo',
+        );
+    }
+
+    // Validar contra el padrón de residentes reales (cédula + manzana + villa)
+    if (dto.rol === 'residente') {
+      const enPadron = await this.prisma.rESIDENTES_REALES.findFirst({
+        where: {
+          cedula: dto.cedula,
+          manzana: parseInt(dto.manzana, 10),
+          villa: parseInt(dto.villa, 10),
+          activo: true,
+        },
+      });
+      if (!enPadron) {
+        throw new BadRequestException(
+          'No estás registrado como residente real de esta urbanización',
+        );
+      }
+    }
+
+    // Límite de 3 residentes por manzana + villa (cuenta pendientes y aprobados)
+    if (dto.rol === 'residente') {
+      const residentesEnVivienda = await this.prisma.rESIDENTES.count({
+        where: {
+          manzana: dto.manzana,
+          villa: dto.villa,
+          usuario: {
+            estado: { in: ['pendiente', 'aprobado'] },
+          },
+        },
+      });
+      if (residentesEnVivienda >= 3) {
+        throw new BadRequestException(
+          'Esta vivienda (Manzana ' +
+            dto.manzana +
+            ', Villa ' +
+            dto.villa +
+            ') ya alcanzó el máximo de 3 residentes registrados',
+        );
+      }
     }
 
     const contrasena_hash = await bcrypt.hash(dto.contrasena, 10);
     const estado = dto.rol === 'residente' ? 'pendiente' : 'aprobado';
 
-    const usuario = await this.prisma.uSUARIOS.create({
-      data: {
-        cedula: dto.cedula,
-        nombres: dto.nombres,
-        apellidos: dto.apellidos,
-        correo: dto.correo,
-        telefono: dto.telefono,
-        usuario: dto.usuario,
-        contrasena_hash,
-        rol: dto.rol,
-        estado,
-      },
+    const resultado = await this.prisma.$transaction(async (tx) => {
+      const usuario = await tx.uSUARIOS.create({
+        data: {
+          cedula: dto.cedula,
+          nombres: dto.nombres,
+          apellidos: dto.apellidos,
+          correo: dto.correo,
+          telefono: dto.telefono,
+          usuario: dto.usuario,
+          contrasena_hash,
+          rol: dto.rol,
+          estado,
+          creado_por: dto.creado_por ?? null,
+          created_at: ahoraEcuadorLiteral(),
+        },
+      });
+
+      if (dto.rol === 'residente') {
+        await tx.rESIDENTES.create({
+          data: {
+            usuario_id: usuario.id,
+            manzana: dto.manzana,
+            villa: dto.villa,
+            updated_at: ahoraEcuadorLiteral(),
+          },
+        });
+      }
+
+      if (dto.rol === 'administrador') {
+        await tx.aDMINISTRADORES.create({
+          data: {
+            usuario_id: usuario.id,
+            id_administrador: dto.id_administrador,
+            updated_at: ahoraEcuadorLiteral(),
+          },
+        });
+      }
+
+      if (dto.rol === 'guardia') {
+        await tx.gUARDIAS.create({
+          data: {
+            usuario_id: usuario.id,
+            id_guardia: dto.id_guardia,
+            turno_id: dto.turno_id,
+            updated_at: ahoraEcuadorLiteral(),
+          },
+        });
+      }
+
+      const documentos = await tx.dOCUMENTOS.findMany({
+        where: {
+          activo: true,
+          tipo: { in: ['terminos_condiciones', 'politica_privacidad'] },
+        },
+      });
+
+      for (const doc of documentos) {
+        await tx.aCEPTACION_TERMINOS.create({
+          data: {
+            usuario_id: usuario.id,
+            documento_id: doc.id,
+            version_documento: doc.version,
+            ip_dispositivo: dto.ip_dispositivo,
+            fecha_aceptacion: ahoraEcuadorLiteral(),
+          },
+        });
+      }
+
+      return {
+        mensaje: 'Usuario registrado exitosamente',
+        id: usuario.id,
+        rol: usuario.rol,
+        estado: usuario.estado,
+      };
     });
-
-    if (dto.rol === 'residente') {
-      await this.prisma.rESIDENTES.create({
-        data: {
-          usuario_id: usuario.id,
-          manzana: dto.manzana,
-          villa: dto.villa,
-        },
-      });
-    }
-
-    if (dto.rol === 'administrador') {
-      await this.prisma.aDMINISTRADORES.create({
-        data: {
-          usuario_id: usuario.id,
-          id_administrador: dto.id_administrador,
-        },
-      });
-    }
-
+    // Correo de bienvenida al guardia (sin contraseña, con datos del admin creador)
     if (dto.rol === 'guardia') {
-      await this.prisma.gUARDIAS.create({
-        data: {
-          usuario_id: usuario.id,
-          id_guardia: dto.id_guardia,
-          turno_id: dto.turno_id,
-        },
-      });
+      try {
+        let adminNombre = 'el administrador';
+        let adminCorreo = '';
+        let adminTelefono = '';
+        if (dto.creado_por) {
+          const admin = await this.prisma.uSUARIOS.findUnique({
+            where: { id: dto.creado_por },
+          });
+          if (admin) {
+            adminNombre = `${admin.nombres} ${admin.apellidos}`;
+            adminCorreo = admin.correo;
+            adminTelefono = admin.telefono ?? '';
+          }
+        }
+        await this.mail.enviarBienvenidaGuardia(
+          dto.correo,
+          `${dto.nombres} ${dto.apellidos}`,
+          dto.usuario,
+          adminNombre,
+          adminCorreo,
+          adminTelefono,
+        );
+      } catch (e) {
+        console.error('Error enviando correo al guardia:', e);
+      }
     }
 
-    const documentos = await this.prisma.dOCUMENTOS.findMany({
-      where: {
-        activo: true,
-        tipo: { in: ['terminos_condiciones', 'politica_privacidad'] },
-      },
-    });
-
-    for (const doc of documentos) {
-      await this.prisma.aCEPTACION_TERMINOS.create({
-        data: {
-          usuario_id: usuario.id,
-          documento_id: doc.id,
-          version_documento: doc.version,
-          ip_dispositivo: dto.ip_dispositivo,
-        },
-      });
+    // Notificar a los administradores de una nueva solicitud de residente
+    if (dto.rol === 'residente') {
+      try {
+        const admins = await this.prisma.uSUARIOS.findMany({
+          where: { rol: 'administrador', estado: 'aprobado' },
+          select: { id: true },
+        });
+        await this.prisma.nOTIFICACIONES.createMany({
+          data: admins.map((a) => ({
+            usuario_id: a.id,
+            tipo: 'sistema',
+            titulo: 'Nueva solicitud de residente',
+            mensaje: `${dto.nombres} ${dto.apellidos} (Mz ${dto.manzana}, Villa ${dto.villa}) se registró y espera aprobación.`,
+            created_at: ahoraEcuadorLiteral(),
+          })),
+        });
+      } catch (e) {
+        console.error('Error notificando a administradores:', e);
+      }
     }
 
-    return {
-      mensaje: 'Usuario registrado exitosamente',
-      id: usuario.id,
-      rol: usuario.rol,
-      estado: usuario.estado,
-    };
+    return resultado;
   }
 
   async buscarPorUsuario(usuario: string) {
@@ -172,7 +311,11 @@ export class UsuariosService {
       include: {
         residente: true,
         administrador: true,
-        guardia: true,
+        guardia: {
+          include: {
+            turno: true,
+          },
+        },
       },
     });
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
@@ -195,6 +338,17 @@ export class UsuariosService {
     });
   }
 
+  async listarTodosUsuarios() {
+    return this.prisma.uSUARIOS.findMany({
+      include: {
+        residente: true,
+        guardia: true,
+        administrador: true,
+      },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
   async aprobarRechazarResidente(
     id: string,
     estado: string,
@@ -203,30 +357,305 @@ export class UsuariosService {
     const usuario = await this.prisma.uSUARIOS.findUnique({ where: { id } });
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
     if (usuario.rol !== 'residente') {
-      throw new BadRequestException('Solo se pueden aprobar residentes');
+      throw new BadRequestException('Solo se pueden gestionar residentes');
+    }
+
+    const estadosValidos = [
+      'aprobado',
+      'rechazado',
+      'desactivado',
+      'pendiente',
+    ];
+    if (!estadosValidos.includes(estado)) {
+      throw new BadRequestException('Estado no válido');
+    }
+
+    // Si el estado no cambia, no hacer nada (evita registros redundantes y doble-tap)
+    if (usuario.estado === estado) {
+      return {
+        mensaje: `El residente ya se encuentra en estado ${estado}`,
+        usuario,
+      };
+    }
+
+    // El log usa administrador.id; creado_por necesita el usuario_id del admin
+    let adminUsuarioId: string | null = null;
+    if (estado === 'aprobado' && administrador_id) {
+      const admin = await this.prisma.aDMINISTRADORES.findUnique({
+        where: { id: administrador_id },
+      });
+      adminUsuarioId = admin?.usuario_id ?? null;
     }
 
     const usuarioActualizado = await this.prisma.uSUARIOS.update({
       where: { id },
-      data: { estado },
+      data: {
+        estado,
+        ...(adminUsuarioId && { creado_por: adminUsuarioId }),
+      },
     });
+
+    const accionLog =
+      {
+        aprobado: 'aprobar',
+        rechazado: 'rechazar',
+        desactivado: 'desactivar',
+        pendiente: 'reactivar',
+      }[estado] ?? 'modificar';
+
+    // Texto legible del cambio según la acción
+    const estadosLegibles: Record<string, string> = {
+      pendiente: 'Pendiente',
+      aprobado: 'Aprobado',
+      rechazado: 'Rechazado',
+      desactivado: 'Desactivado',
+    };
+    const detalleLegible =
+      `Se cambió el estado de ` +
+      `${estadosLegibles[usuario.estado] ?? usuario.estado} a ` +
+      `${estadosLegibles[estado] ?? estado}.`;
 
     await this.prisma.gESTION_USUARIOS_LOG.create({
       data: {
         administrador_id,
         usuario_afectado_id: id,
-        accion: estado === 'aprobado' ? 'aprobar' : 'rechazar',
-        detalle: JSON.stringify({
-          campo: 'estado',
-          anterior: usuario.estado,
-          nuevo: estado,
-        }),
+        accion: accionLog,
+        detalle: detalleLegible,
+        created_at: ahoraEcuadorLiteral(),
       },
     });
 
+    // Correo al residente según el resultado
+    if (estado === 'aprobado' || estado === 'rechazado') {
+      try {
+        await this.mail.enviarResultadoSolicitud(
+          usuario.correo,
+          `${usuario.nombres} ${usuario.apellidos}`,
+          estado === 'aprobado',
+        );
+      } catch (e) {
+        console.error('Error enviando correo al residente:', e);
+      }
+    }
+
     return {
-      mensaje: `Residente ${estado === 'aprobado' ? 'aprobado' : 'rechazado'} exitosamente`,
+      mensaje: `Residente ${estado} exitosamente`,
       usuario: usuarioActualizado,
     };
+  }
+
+  async cambiarContrasena(
+    id: string,
+    contrasena_actual: string,
+    contrasena_nueva: string,
+  ) {
+    const usuario = await this.prisma.uSUARIOS.findUnique({ where: { id } });
+    if (!usuario) throw new NotFoundException('Usuario no encontrado');
+
+    const valida = await bcrypt.compare(
+      contrasena_actual,
+      usuario.contrasena_hash,
+    );
+    if (!valida)
+      throw new BadRequestException('La contrasena actual es incorrecta');
+
+    this.validarContrasena(contrasena_nueva);
+
+    const hash = await bcrypt.hash(contrasena_nueva, 10);
+    await this.prisma.uSUARIOS.update({
+      where: { id },
+      data: { contrasena_hash: hash },
+    });
+
+    return { mensaje: 'Contrasena actualizada exitosamente' };
+  }
+
+  async actualizarDatos(
+    id: string,
+    correo: string,
+    telefono: string,
+    manzana?: string,
+    villa?: string,
+  ) {
+    const usuario = await this.prisma.uSUARIOS.findUnique({
+      where: { id },
+      include: { residente: true },
+    });
+    if (!usuario) throw new NotFoundException('Usuario no encontrado');
+
+    // Validar correo duplicado (en otro usuario distinto)
+    if (correo && correo !== usuario.correo) {
+      const existeCorreo = await this.prisma.uSUARIOS.findFirst({
+        where: { correo, id: { not: id } },
+      });
+      if (existeCorreo) {
+        throw new BadRequestException(
+          'Ese correo ya está en uso por otro usuario',
+        );
+      }
+    }
+
+    // Validar teléfono duplicado (en otro usuario distinto)
+    if (telefono && telefono !== usuario.telefono) {
+      const existeTelefono = await this.prisma.uSUARIOS.findFirst({
+        where: { telefono, id: { not: id } },
+      });
+      if (existeTelefono) {
+        throw new BadRequestException(
+          'Ese número de teléfono ya está en uso por otro usuario',
+        );
+      }
+    }
+
+    await this.prisma.uSUARIOS.update({
+      where: { id },
+      data: {
+        ...(correo && { correo }),
+        ...(telefono && { telefono }),
+      },
+    });
+
+    if (usuario.residente && (manzana || villa)) {
+      await this.prisma.rESIDENTES.update({
+        where: { usuario_id: id },
+        data: {
+          ...(manzana && { manzana }),
+          ...(villa && { villa }),
+        },
+      });
+    }
+
+    return { mensaje: 'Datos actualizados exitosamente' };
+  }
+
+  async listarTurnos() {
+    return this.prisma.tURNOS.findMany({
+      orderBy: { nombre: 'asc' },
+    });
+  }
+
+  async verificarPaso1(cedula: string, correo: string, telefono: string) {
+    const existenteCedula = await this.prisma.uSUARIOS.findFirst({
+      where: { cedula },
+    });
+    if (existenteCedula)
+      throw new BadRequestException('Ya existe un usuario con esa cédula');
+
+    const existenteCorreo = await this.prisma.uSUARIOS.findFirst({
+      where: { correo },
+    });
+    if (existenteCorreo)
+      throw new BadRequestException('Ya existe un usuario con ese correo');
+
+    const existenteTelefono = await this.prisma.uSUARIOS.findFirst({
+      where: { telefono },
+    });
+    if (existenteTelefono)
+      throw new BadRequestException('Ya existe un usuario con ese teléfono');
+
+    return { disponible: true };
+  }
+
+  async verificarPaso2(usuario: string, idExterno: string, rol: string) {
+    const existenteUsuario = await this.prisma.uSUARIOS.findFirst({
+      where: { usuario },
+    });
+    if (existenteUsuario)
+      throw new BadRequestException(
+        'Ya existe un usuario con ese nombre de usuario',
+      );
+
+    if (rol === 'guardia' && idExterno) {
+      const existenteGuardia = await this.prisma.gUARDIAS.findFirst({
+        where: { id_guardia: idExterno },
+      });
+      if (existenteGuardia)
+        throw new BadRequestException(
+          'Ya existe un guardia con ese ID externo',
+        );
+    }
+
+    if (rol === 'administrador' && idExterno) {
+      const existenteAdmin = await this.prisma.aDMINISTRADORES.findFirst({
+        where: { id_administrador: idExterno },
+      });
+      if (existenteAdmin)
+        throw new BadRequestException(
+          'Ya existe un administrador con ese ID externo',
+        );
+    }
+
+    return { disponible: true };
+  }
+
+  async actualizarFcmToken(id: string, fcm_token: string) {
+    const usuario = await this.prisma.uSUARIOS.findUnique({ where: { id } });
+    if (!usuario) throw new NotFoundException('Usuario no encontrado');
+
+    await this.prisma.uSUARIOS.update({
+      where: { id },
+      data: { fcm_token },
+    });
+
+    return { mensaje: 'Token FCM actualizado' };
+  }
+
+  async subirFotoPerfil(id: string, foto: Express.Multer.File) {
+    if (!foto) {
+      throw new BadRequestException('No se recibió ninguna imagen');
+    }
+
+    const usuario = await this.prisma.uSUARIOS.findUnique({
+      where: { id },
+      include: { residente: true, administrador: true, guardia: true },
+    });
+    if (!usuario) throw new NotFoundException('Usuario no encontrado');
+
+    // Subir la imagen a Cloudinary (carpeta separada por tipo)
+    const url = await this.cloudinary.subirArchivo(
+      foto.buffer,
+      'urbanapp/perfiles',
+    );
+
+    // Guardar la URL en la tabla correcta según el rol
+    if (usuario.rol === 'residente' && usuario.residente) {
+      await this.prisma.rESIDENTES.update({
+        where: { usuario_id: id },
+        data: { foto_url: url, updated_at: ahoraEcuadorLiteral() },
+      });
+    } else if (usuario.rol === 'administrador' && usuario.administrador) {
+      await this.prisma.aDMINISTRADORES.update({
+        where: { usuario_id: id },
+        data: { foto_url: url, updated_at: ahoraEcuadorLiteral() },
+      });
+    } else if (usuario.rol === 'guardia' && usuario.guardia) {
+      await this.prisma.gUARDIAS.update({
+        where: { usuario_id: id },
+        data: { foto_url: url, updated_at: ahoraEcuadorLiteral() },
+      });
+    }
+
+    return { mensaje: 'Foto de perfil actualizada', foto_url: url };
+  }
+
+  // Verifica si una cédula + manzana + villa coinciden con el padrón de residentes reales
+  async verificarPadron(cedula: string, manzana: string, villa: string) {
+    const enPadron = await this.prisma.rESIDENTES_REALES.findFirst({
+      where: {
+        cedula,
+        manzana: parseInt(manzana, 10),
+        villa: parseInt(villa, 10),
+        activo: true,
+      },
+    });
+    return { verificado: !!enPadron };
+  }
+
+  // Lista los residentes reales de una manzana (padrón)
+  async listarPadronPorManzana(manzana: string) {
+    return this.prisma.rESIDENTES_REALES.findMany({
+      where: { manzana: parseInt(manzana, 10) },
+      orderBy: [{ villa: 'asc' }, { cedula: 'asc' }],
+    });
   }
 }

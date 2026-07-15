@@ -12,6 +12,7 @@ export class CrearUsuarioDto {
   manzana?: string;
   villa?: string;
   turno_id?: string;
+  creado_por?: string;
   acepta_terminos: boolean;
   acepta_privacidad: boolean;
   ip_dispositivo?: string;
