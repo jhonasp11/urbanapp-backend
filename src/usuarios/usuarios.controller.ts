@@ -110,11 +110,13 @@ export class UsuariosController {
     @Param('id') id: string,
     @Body('estado') estado: string,
     @Body('administrador_id') administrador_id: string,
+    @Body('motivo') motivo?: string,
   ) {
     return this.usuariosService.aprobarRechazarResidente(
       id,
       estado,
       administrador_id,
+      motivo,
     );
   }
 

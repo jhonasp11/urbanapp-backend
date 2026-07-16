@@ -124,23 +124,6 @@ export class UsuariosService {
         );
     }
 
-    // Validar contra el padrón de residentes reales (cédula + manzana + villa)
-    if (dto.rol === 'residente') {
-      const enPadron = await this.prisma.rESIDENTES_REALES.findFirst({
-        where: {
-          cedula: dto.cedula,
-          manzana: parseInt(dto.manzana, 10),
-          villa: parseInt(dto.villa, 10),
-          activo: true,
-        },
-      });
-      if (!enPadron) {
-        throw new BadRequestException(
-          'No estás registrado como residente real de esta urbanización',
-        );
-      }
-    }
-
     // Límite de 3 residentes por manzana + villa (cuenta pendientes y aprobados)
     if (dto.rol === 'residente') {
       const residentesEnVivienda = await this.prisma.rESIDENTES.count({
@@ -353,8 +336,12 @@ export class UsuariosService {
     id: string,
     estado: string,
     administrador_id: string,
+    motivo?: string,
   ) {
-    const usuario = await this.prisma.uSUARIOS.findUnique({ where: { id } });
+    const usuario = await this.prisma.uSUARIOS.findUnique({
+      where: { id },
+      include: { residente: true },
+    });
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
     if (usuario.rol !== 'residente') {
       throw new BadRequestException('Solo se pueden gestionar residentes');
@@ -368,6 +355,25 @@ export class UsuariosService {
     ];
     if (!estadosValidos.includes(estado)) {
       throw new BadRequestException('Estado no válido');
+    }
+
+    // Aprobar a alguien fuera del padrón exige justificación del administrador
+    let fueraDePadron = false;
+    if (estado === 'aprobado' && usuario.residente) {
+      const enPadron = await this.prisma.rESIDENTES_REALES.findFirst({
+        where: {
+          cedula: usuario.cedula,
+          manzana: parseInt(usuario.residente.manzana, 10),
+          villa: parseInt(usuario.residente.villa, 10),
+          activo: true,
+        },
+      });
+      fueraDePadron = !enPadron;
+      if (fueraDePadron && (!motivo || motivo.trim() === '')) {
+        throw new BadRequestException(
+          'Este residente no consta en el padrón. Debes indicar un motivo para aprobarlo.',
+        );
+      }
     }
 
     // Si el estado no cambia, no hacer nada (evita registros redundantes y doble-tap)
@@ -410,10 +416,13 @@ export class UsuariosService {
       rechazado: 'Rechazado',
       desactivado: 'Desactivado',
     };
-    const detalleLegible =
+    let detalleLegible =
       `Se cambió el estado de ` +
       `${estadosLegibles[usuario.estado] ?? usuario.estado} a ` +
       `${estadosLegibles[estado] ?? estado}.`;
+    if (fueraDePadron && motivo) {
+      detalleLegible += ` Aprobado fuera del padrón. Motivo: ${motivo.trim()}`;
+    }
 
     await this.prisma.gESTION_USUARIOS_LOG.create({
       data: {
