@@ -1,21 +1,32 @@
 import { Injectable } from '@nestjs/common';
-import { Resend } from 'resend';
 
 @Injectable()
 export class MailService {
-  private resend = new Resend(process.env.RESEND_API_KEY);
-  private remitente =
-    process.env.MAIL_FROM ?? 'UrbanApp <onboarding@resend.dev>';
+  private readonly url = 'https://api.brevo.com/v3/smtp/email';
+  private readonly remitente = {
+    name: process.env.MAIL_FROM_NAME ?? 'UrbanApp',
+    email: process.env.MAIL_FROM_EMAIL ?? 'notificacionesurbanapp@gmail.com',
+  };
 
   private async enviar(destino: string, asunto: string, html: string) {
-    const { error } = await this.resend.emails.send({
-      from: this.remitente,
-      to: destino,
-      subject: asunto,
-      html,
+    const res = await fetch(this.url, {
+      method: 'POST',
+      headers: {
+        'api-key': process.env.BREVO_API_KEY ?? '',
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: this.remitente,
+        to: [{ email: destino }],
+        subject: asunto,
+        htmlContent: html,
+      }),
     });
-    if (error) {
-      throw new Error(`Error enviando correo: ${JSON.stringify(error)}`);
+
+    if (!res.ok) {
+      const detalle = await res.text();
+      throw new Error(`Error enviando correo (${res.status}): ${detalle}`);
     }
   }
 
