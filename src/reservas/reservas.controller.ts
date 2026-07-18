@@ -5,6 +5,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -12,6 +13,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { ReservasService } from './reservas.service';
 import { CrearReservaDto } from './dto/crear-reserva.dto';
@@ -75,6 +77,21 @@ export class ReservasController {
   @Get()
   listarTodas() {
     return this.reservasService.listarTodas();
+  }
+
+  @ApiOperation({
+    summary: 'Listar reservas validadas (histórico), con búsqueda opcional',
+  })
+  @ApiResponse({ status: 200, description: 'Lista de reservas validadas' })
+  @ApiQuery({
+    name: 'q',
+    required: false,
+    description: 'Buscar por nombre o cédula del residente',
+  })
+  @Roles('administrador')
+  @Get('validadas')
+  listarValidadas(@Query('q') q?: string) {
+    return this.reservasService.listarValidadas(q);
   }
 
   @ApiOperation({ summary: 'Aprobar o rechazar una reserva' })

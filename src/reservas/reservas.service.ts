@@ -360,6 +360,48 @@ export class ReservasService {
     });
   }
 
+  async listarValidadas(q?: string) {
+    const busqueda = q?.trim();
+
+    return this.prisma.rESERVAS.findMany({
+      where: {
+        estado: { in: ['confirmada', 'denegada', 'completada'] },
+        validado_por: { not: null },
+        ...(busqueda && {
+          residente: {
+            usuario: {
+              OR: [
+                { cedula: { contains: busqueda, mode: 'insensitive' } },
+                { nombres: { contains: busqueda, mode: 'insensitive' } },
+                { apellidos: { contains: busqueda, mode: 'insensitive' } },
+              ],
+            },
+          },
+        }),
+      },
+      include: {
+        area: true,
+        residente: {
+          include: {
+            usuario: {
+              select: { nombres: true, apellidos: true, cedula: true },
+            },
+          },
+        },
+        administrador: {
+          include: {
+            usuario: { select: { id: true, nombres: true, apellidos: true } },
+          },
+        },
+        pagos: {
+          orderBy: { fecha_envio: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
   async validar(id: string, dto: ValidarReservaDto) {
     const reserva = await this.prisma.rESERVAS.findUnique({
       where: { id },

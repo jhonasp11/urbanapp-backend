@@ -142,6 +142,49 @@ export class PagosService {
     });
   }
 
+  async listarValidados(q?: string) {
+    const busqueda = q?.trim();
+
+    return this.prisma.pAGOS.findMany({
+      where: {
+        estado: { in: ['aprobado', 'rechazado'] },
+        validado_por: { not: null },
+        ...(busqueda && {
+          residente: {
+            usuario: {
+              OR: [
+                { cedula: { contains: busqueda, mode: 'insensitive' } },
+                { nombres: { contains: busqueda, mode: 'insensitive' } },
+                { apellidos: { contains: busqueda, mode: 'insensitive' } },
+              ],
+            },
+          },
+        }),
+      },
+      include: {
+        residente: {
+          include: {
+            usuario: {
+              select: { nombres: true, apellidos: true, cedula: true },
+            },
+          },
+        },
+        pagos_alicuotas: {
+          include: { alicuota: true },
+        },
+        reserva: {
+          include: { area: true },
+        },
+        administrador: {
+          include: {
+            usuario: { select: { id: true, nombres: true, apellidos: true } },
+          },
+        },
+      },
+      orderBy: { fecha_validacion: 'desc' },
+    });
+  }
+
   async validar(id: string, dto: ValidarPagoDto) {
     const pago = await this.prisma.pAGOS.findUnique({
       where: { id },
