@@ -98,6 +98,8 @@ export class AlicuotasService {
 
     const resultados = [];
     const errores = [];
+    const creadosNombres: string[] = [];
+    const omitidosNombres: string[] = [];
 
     for (const usuario of residentes) {
       if (!usuario.residente) continue;
@@ -112,9 +114,9 @@ export class AlicuotasService {
       });
 
       if (existente) {
-        errores.push(
-          `${usuario.nombres} ${usuario.apellidos} ya tiene alícuota para ${mes}/${anio}`,
-        );
+        const nombre = `${usuario.nombres} ${usuario.apellidos}`;
+        errores.push(`${nombre} ya tiene alícuota para ${mes}/${anio}`);
+        omitidosNombres.push(nombre);
         continue;
       }
 
@@ -130,13 +132,16 @@ export class AlicuotasService {
         },
       });
       resultados.push(alicuota);
+      creadosNombres.push(`${usuario.nombres} ${usuario.apellidos}`);
     }
 
     return {
       creadas: resultados.length,
       omitidas: errores.length,
       errores,
-      mensaje: `Se crearon ${resultados.length} alícuotas correctamente. ${errores.length > 0 ? `${errores.length} omitidas por duplicado.` : ''}`,
+      creados_nombres: creadosNombres,
+      omitidos_nombres: omitidosNombres,
+      mensaje: `Se crearon ${resultados.length} alícuotas correctamente.${errores.length > 0 ? ` ${errores.length} omitidas por duplicado.` : ''}`,
     };
   }
   // ===== HELPERS DE DISEÑO PDF =====

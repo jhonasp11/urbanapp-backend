@@ -75,6 +75,14 @@ export class CodigosQrService {
     const fin = new Date(fecha_fin + 'Z');
     const diffHoras = (fin.getTime() - inicio.getTime()) / (1000 * 60 * 60);
 
+    // La fecha/hora de inicio debe ser posterior a la hora actual
+    const ahora = this.ahoraEcuadorLiteral();
+    if (inicio < ahora) {
+      throw new BadRequestException(
+        'La fecha y hora de inicio debe ser posterior a la hora actual',
+      );
+    }
+
     if (diffHoras > 24) {
       throw new BadRequestException(
         'El codigo QR no puede tener mas de 24 horas de duracion',
@@ -87,13 +95,20 @@ export class CodigosQrService {
       );
     }
 
+    // Verificar por cédula del visitante (no por visitante_id), porque un
+    // visitante no guardado se crea como registro nuevo en cada QR.
     const codigoExistente = await this.prisma.cODIGOS_QR.findFirst({
-      where: { visitante_id, estado: 'activo' },
+      where: {
+        estado: 'activo',
+        residente_id,
+        visitante: { cedula_visitante: visitante.cedula_visitante },
+      },
     });
 
     if (codigoExistente) {
-      const qrImage = await QRCode.toDataURL(codigoExistente.codigo_hash);
-      return { ...codigoExistente, qr_image: qrImage };
+      throw new BadRequestException(
+        'Este visitante ya tiene un código QR activo. Revísalo en el historial de accesos para compartirlo, o anúlalo para generar uno nuevo.',
+      );
     }
 
     const codigo_hash = randomBytes(32).toString('hex');
@@ -251,6 +266,17 @@ export class CodigosQrService {
     manzana_destino: string,
     villa_destino: string,
   ) {
+    if ((nombre_visitante ?? '').trim().length < 8) {
+      throw new BadRequestException(
+        'El nombre del visitante debe tener al menos 8 caracteres',
+      );
+    }
+    if ((nombre_residente ?? '').trim().length < 8) {
+      throw new BadRequestException(
+        'El nombre del residente debe tener al menos 8 caracteres',
+      );
+    }
+
     const residenteId = await this.obtenerResidenteIdPorUbicacion(
       manzana_destino,
       villa_destino,
@@ -339,6 +365,12 @@ export class CodigosQrService {
     hora_ingreso: string,
     bitacora_id: string | null,
   ) {
+    if ((observacion_incidencia ?? '').trim().length < 20) {
+      throw new BadRequestException(
+        'El reporte de incidencia debe tener al menos 20 caracteres',
+      );
+    }
+
     const incidencia = await this.prisma.iNGRESOS.create({
       data: {
         guardia: { connect: { id: guardia_id } },

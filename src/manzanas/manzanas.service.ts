@@ -80,6 +80,42 @@ export class ManzanasService {
     return manzana;
   }
 
+  // Detalle de villas de una manzana con sus residentes (padrón cruzado con usuarios)
+  async detalleVillasConResidentes(numeroManzana: number) {
+    const manzana = await this.prisma.mANZANAS.findUnique({
+      where: { numero: numeroManzana },
+      include: { villas: { orderBy: { numero: 'asc' } } },
+    });
+    if (!manzana) throw new NotFoundException('Manzana no encontrada');
+
+    // Padrón de esta manzana
+    const padron = await this.prisma.rESIDENTES_REALES.findMany({
+      where: { manzana: numeroManzana, activo: true },
+    });
+
+    // Usuarios residentes registrados (para saber quién tiene app + teléfono)
+    const usuarios = await this.prisma.uSUARIOS.findMany({
+      where: { rol: 'residente' },
+      select: { cedula: true, telefono: true },
+    });
+    const mapaUsuarios = new Map(usuarios.map((u) => [u.cedula, u.telefono]));
+
+    // Armar cada villa con sus residentes del padrón
+    const villas = manzana.villas.map((v) => {
+      const residentes = padron
+        .filter((p) => p.villa === v.numero)
+        .map((p) => ({
+          nombres: p.nombres,
+          cedula: p.cedula,
+          telefono: mapaUsuarios.get(p.cedula) ?? null,
+          tiene_app: mapaUsuarios.has(p.cedula),
+        }));
+      return { villa: v.numero, residentes };
+    });
+
+    return { manzana: numeroManzana, villas };
+  }
+
   // Lista solo los números de manzanas activas (para selects del front)
   async listarNumeros() {
     const manzanas = await this.prisma.mANZANAS.findMany({

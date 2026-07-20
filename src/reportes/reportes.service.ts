@@ -483,6 +483,36 @@ export class ReportesService {
       );
     }
 
+    doc.moveDown();
+
+    // Detalle de incidencias reportadas
+    this.pdfSeccion(
+      doc,
+      `Incidencias reportadas (${ingresosDenegados.length})`,
+    );
+    if (ingresosDenegados.length === 0) {
+      doc
+        .fontSize(9)
+        .fillColor('#777777')
+        .text('No se registraron incidencias en este periodo.');
+    } else {
+      this.pdfTabla(
+        doc,
+        [
+          { titulo: '#', ancho: 22 },
+          { titulo: 'Fecha/Hora', ancho: 100 },
+          { titulo: 'Guardia', ancho: 130 },
+          { titulo: 'Incidencia', ancho: 193 },
+        ],
+        ingresosDenegados.map((ing, i) => [
+          `${i + 1}`,
+          `${new Date(ing.hora_ingreso).toLocaleString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+          `${ing.guardia?.usuario?.nombres ?? ''} ${ing.guardia?.usuario?.apellidos ?? ''}`.trim() || 'N/A',
+          `${ing.observacion_incidencia ?? 'Sin detalle'}`,
+        ]),
+      );
+    }
+
     doc.end();
   }
 
@@ -780,6 +810,62 @@ export class ReportesService {
           `${p.nombres}`,
           `${p.cedula}`,
           `Mz ${p.manzana} - Villa ${p.villa}`,
+        ]),
+      );
+    }
+
+    doc.moveDown();
+
+    // ADMINISTRADORES
+    this.pdfSeccion(doc, `Administradores (${administradores.length})`);
+    if (administradores.length === 0) {
+      doc
+        .fontSize(9)
+        .fillColor('#777777')
+        .text('No hay administradores registrados.');
+      doc.moveDown();
+    } else {
+      this.pdfTabla(
+        doc,
+        [
+          { titulo: '#', ancho: 25 },
+          { titulo: 'Nombre', ancho: 220 },
+          { titulo: 'Cédula', ancho: 110 },
+          { titulo: 'ID Admin', ancho: 140 },
+        ],
+        administradores.map((u, i) => [
+          `${i + 1}`,
+          `${u.nombres} ${u.apellidos}`,
+          `${u.cedula}`,
+          `${u.administrador?.id_administrador ?? '-'}`,
+        ]),
+      );
+      doc.moveDown();
+    }
+
+    // GUARDIAS
+    this.pdfSeccion(doc, `Guardias (${guardias.length})`);
+    if (guardias.length === 0) {
+      doc
+        .fontSize(9)
+        .fillColor('#777777')
+        .text('No hay guardias registrados.');
+    } else {
+      this.pdfTabla(
+        doc,
+        [
+          { titulo: '#', ancho: 25 },
+          { titulo: 'Nombre', ancho: 200 },
+          { titulo: 'Cédula', ancho: 100 },
+          { titulo: 'ID Guardia', ancho: 90 },
+          { titulo: 'Turno', ancho: 80 },
+        ],
+        guardias.map((u, i) => [
+          `${i + 1}`,
+          `${u.nombres} ${u.apellidos}`,
+          `${u.cedula}`,
+          `${u.guardia?.id_guardia ?? '-'}`,
+          `${u.guardia?.turno?.nombre ?? '-'}`,
         ]),
       );
     }

@@ -128,13 +128,15 @@ export class ReservasService {
       }
     }
 
-    // Verificar si ya existe una reserva activa en esa área, fecha y hora.
+    // Verificar solapamiento con reservas activas en esa área y fecha.
+    // Dos rangos chocan si: inicioNuevo < finExistente Y finNuevo > inicioExistente.
     // pendiente_pago también ocupa el slot (bloqueo de 10 min).
     const yaReservada = await this.prisma.rESERVAS.findFirst({
       where: {
         area_id: dto.area_id,
         fecha_reserva: new Date(`${dto.fecha_reserva}T00:00:00Z`),
-        hora_inicio: this.horaAUtc(dto.hora_inicio),
+        hora_inicio: { lt: this.horaAUtc(dto.hora_fin) },
+        hora_fin: { gt: this.horaAUtc(dto.hora_inicio) },
         estado: { in: ['pendiente', 'pendiente_pago', 'confirmada'] },
       },
     });

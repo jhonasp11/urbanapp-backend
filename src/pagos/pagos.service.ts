@@ -76,12 +76,15 @@ export class PagosService {
       }
     }
 
-    // Notificar a los administradores que hay un nuevo pago por revisar
-    await this.notificarAdmins(
-      'pago',
-      'Nuevo pago por revisar',
-      'Un residente subió un comprobante de pago que requiere tu validación.',
-    );
+    // Notificar al admin solo si es pago de alícuota.
+    // Los pagos de reserva (salón) ya notifican vía reservas.marcarPagada.
+    if (!dto.reserva_id) {
+      await this.notificarAdmins(
+        'pago',
+        'Nuevo pago por revisar',
+        'Un residente subió un comprobante de pago que requiere tu validación.',
+      );
+    }
 
     return pago;
   }
@@ -190,6 +193,9 @@ export class PagosService {
       where: { id },
       include: {
         pagos_alicuotas: true,
+        residente: {
+          include: { usuario: true },
+        },
       },
     });
     if (!pago) throw new NotFoundException('Pago no encontrado');
@@ -247,6 +253,36 @@ export class PagosService {
             bloqueo_hasta: null,
           },
         });
+      }
+    }
+
+    // Notificar al residente el resultado de la validación del pago.
+    // Solo para pagos de alícuota; los de reserva ya notifican vía reserva.
+    if (!pago.reserva_id) {
+      try {
+        const usuario = pago.residente?.usuario;
+        if (usuario) {
+          const aprobado = dto.estado === 'aprobado';
+          const titulo = aprobado ? 'Pago aprobado' : 'Pago rechazado';
+          let mensaje: string;
+          if (aprobado) {
+            mensaje = 'Tu pago de alícuota ha sido aprobado.';
+          } else {
+            mensaje = dto.observacion_admin
+              ? `Tu pago de alícuota ha sido rechazado. Motivo: ${dto.observacion_admin}`
+              : 'Tu pago de alícuota ha sido rechazado.';
+          }
+
+          await this.notificaciones.crear(
+            usuario.id,
+            'pago',
+            titulo,
+            mensaje,
+            usuario.fcm_token ?? undefined,
+          );
+        }
+      } catch (e) {
+        console.error('Error notificando al residente:', e);
       }
     }
 

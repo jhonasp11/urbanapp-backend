@@ -79,6 +79,23 @@ export class AuthService {
 
     if (!usuario) return respuestaGenerica;
 
+    // No permitir recuperar contraseña si la cuenta no está activa
+    if (usuario.estado === 'pendiente') {
+      throw new BadRequestException(
+        'Tu cuenta está pendiente de aprobación. No puedes recuperar la contraseña hasta ser aprobado.',
+      );
+    }
+    if (usuario.estado === 'rechazado') {
+      throw new BadRequestException(
+        'Tu cuenta ha sido rechazada. No puedes recuperar la contraseña.',
+      );
+    }
+    if (usuario.estado === 'desactivado') {
+      throw new BadRequestException(
+        'Tu cuenta está desactivada. Contacta al administrador.',
+      );
+    }
+
     // Generar código de 6 dígitos
     const codigo = Math.floor(100000 + Math.random() * 900000).toString();
     const expira = ahoraEcuadorLiteral();
@@ -165,6 +182,17 @@ export class AuthService {
 
     if (!registro) {
       throw new BadRequestException('Código inválido o expirado');
+    }
+
+    // La nueva contraseña no puede ser igual a la actual
+    const esIgual = await bcrypt.compare(
+      nuevaContrasena,
+      usuario.contrasena_hash,
+    );
+    if (esIgual) {
+      throw new BadRequestException(
+        'La nueva contraseña no puede ser igual a la actual',
+      );
     }
 
     // Actualizar la contraseña

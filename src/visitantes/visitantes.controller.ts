@@ -38,6 +38,15 @@ export class VisitantesController {
     return this.visitantesService.crear(dto);
   }
 
+  @ApiOperation({ summary: 'Guardar visitante para futuros accesos' })
+  @ApiResponse({ status: 201, description: 'Visitante guardado exitosamente' })
+  @ApiResponse({ status: 400, description: 'El visitante ya está guardado' })
+  @Roles('residente')
+  @Post('guardar')
+  guardarVisitante(@Body() dto: CrearVisitanteDto) {
+    return this.visitantesService.guardarVisitante(dto);
+  }
+
   @ApiOperation({ summary: 'Listar visitantes de un residente' })
   @ApiResponse({ status: 200, description: 'Lista de visitantes' })
   @Roles('residente', 'administrador')

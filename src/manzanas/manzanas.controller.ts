@@ -50,6 +50,15 @@ export class ManzanasController {
     return this.manzanasService.listarVillasPorManzana(numero);
   }
 
+  @ApiOperation({ summary: 'Detalle de villas de una manzana con residentes' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('administrador')
+  @Get('numero/:numero/detalle')
+  detalleVillasConResidentes(@Param('numero', ParseIntPipe) numero: number) {
+    return this.manzanasService.detalleVillasConResidentes(numero);
+  }
+
   @ApiOperation({ summary: 'Obtener manzana con sus villas' })
   @ApiBearerAuth('JWT-auth')
   @UseGuards(JwtAuthGuard, RolesGuard)

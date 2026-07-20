@@ -468,6 +468,12 @@ export class UsuariosService {
     if (!valida)
       throw new BadRequestException('La contrasena actual es incorrecta');
 
+    if (contrasena_actual === contrasena_nueva) {
+      throw new BadRequestException(
+        'La nueva contraseña no puede ser igual a la actual',
+      );
+    }
+
     this.validarContrasena(contrasena_nueva);
 
     const hash = await bcrypt.hash(contrasena_nueva, 10);

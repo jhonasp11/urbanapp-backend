@@ -43,6 +43,13 @@ export class VisitantesService {
 
   async crear(dto: CrearVisitanteDto) {
     this.validarCedula(dto.cedula_visitante);
+
+    if ((dto.nombre_visitante ?? '').trim().length < 8) {
+      throw new BadRequestException(
+        'El nombre y apellido del visitante deben tener al menos 8 caracteres',
+      );
+    }
+
     return this.prisma.vISITANTES.create({
       data: {
         residente_id: dto.residente_id,
@@ -55,6 +62,46 @@ export class VisitantesService {
           `2000-01-01T${dto.hora_estimada_ingreso}:00Z`,
         ),
         guardado: dto.guardado ?? false,
+        created_at: ahoraEcuadorLiteral(),
+      },
+    });
+  }
+
+  // Guardar un visitante para futuros accesos (proceso separado del QR)
+  async guardarVisitante(dto: CrearVisitanteDto) {
+    this.validarCedula(dto.cedula_visitante);
+
+    if ((dto.nombre_visitante ?? '').trim().length < 8) {
+      throw new BadRequestException(
+        'El nombre y apellido del visitante deben tener al menos 8 caracteres',
+      );
+    }
+
+    const yaGuardado = await this.prisma.vISITANTES.findFirst({
+      where: {
+        residente_id: dto.residente_id,
+        cedula_visitante: dto.cedula_visitante,
+        guardado: true,
+      },
+    });
+    if (yaGuardado) {
+      throw new BadRequestException(
+        'Este visitante ya está guardado en tu lista.',
+      );
+    }
+
+    return this.prisma.vISITANTES.create({
+      data: {
+        residente_id: dto.residente_id,
+        nombre_visitante: dto.nombre_visitante,
+        cedula_visitante: dto.cedula_visitante,
+        fecha_visita: new Date(
+          dto.fecha_visita.substring(0, 10) + 'T00:00:00Z',
+        ),
+        hora_estimada_ingreso: new Date(
+          `2000-01-01T${dto.hora_estimada_ingreso}:00Z`,
+        ),
+        guardado: true,
         created_at: ahoraEcuadorLiteral(),
       },
     });

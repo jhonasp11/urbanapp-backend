@@ -482,14 +482,14 @@ export class BitacoraService {
       this.pdfTabla(
         doc,
         [
-          { titulo: 'Hora', ancho: 50 },
-          { titulo: 'Visitante', ancho: 130 },
-          { titulo: 'Destino', ancho: 110 },
-          { titulo: 'Tipo', ancho: 70 },
-          { titulo: 'Estado', ancho: 135 },
+          { titulo: 'Fecha/Hora', ancho: 90 },
+          { titulo: 'Visitante', ancho: 120 },
+          { titulo: 'Destino', ancho: 95 },
+          { titulo: 'Tipo', ancho: 65 },
+          { titulo: 'Estado', ancho: 125 },
         ],
         ingresos.map((i) => [
-          fmtHora(i.hora_ingreso),
+          `${fmtFecha(i.hora_ingreso)} ${fmtHora(i.hora_ingreso)}`,
           i.nombre_visitante ?? '-',
           i.estado === 'denegado'
             ? '-'
@@ -500,33 +500,31 @@ export class BitacoraService {
       );
     }
 
-    // Sección de incidencias con observaciones completas
+    // Sección de incidencias en formato tabla
     const incidenciasList = ingresos.filter((i) => i.estado === 'denegado');
-    if (incidenciasList.length > 0) {
-      doc.moveDown(1);
-      this.pdfSeccion(
+    doc.moveDown(1);
+    this.pdfSeccion(doc, `Detalle de Incidencias (${incidenciasList.length})`);
+    if (incidenciasList.length === 0) {
+      doc
+        .fontSize(9)
+        .fillColor('#777777')
+        .text('No se registraron incidencias en este turno.');
+    } else {
+      this.pdfTabla(
         doc,
-        `Detalle de Incidencias (${incidenciasList.length})`,
+        [
+          { titulo: '#', ancho: 22 },
+          { titulo: 'Fecha/Hora', ancho: 100 },
+          { titulo: 'Guardia', ancho: 130 },
+          { titulo: 'Incidencia', ancho: 193 },
+        ],
+        incidenciasList.map((i, idx) => [
+          `${idx + 1}`,
+          `${fmtFecha(i.hora_ingreso)} ${fmtHora(i.hora_ingreso)}`,
+          nombreGuardia || 'N/A',
+          i.observacion_incidencia ?? 'Sin detalle',
+        ]),
       );
-      incidenciasList.forEach((i, idx) => {
-        if (doc.y > doc.page.height - 80) doc.addPage();
-        const hora = i.hora_ingreso
-          ? new Date(i.hora_ingreso).toISOString().substring(11, 16)
-          : '-';
-        doc
-          .fontSize(9)
-          .font('Helvetica-Bold')
-          .fillColor(this.azul)
-          .text(`${idx + 1}. ${hora}`, 50, doc.y);
-        doc
-          .fontSize(9)
-          .font('Helvetica')
-          .fillColor(this.grisTexto)
-          .text(i.observacion_incidencia ?? 'Sin descripción', 50, doc.y, {
-            width: doc.page.width - 100,
-          });
-        doc.moveDown(0.6);
-      });
     }
 
     doc.end();
