@@ -37,6 +37,7 @@ model RESIDENTES {
   usuario_id String       @unique @db.Uuid
   manzana    String       @db.VarChar(10)
   villa      String       @db.VarChar(10)
+  titular    Boolean      @default(false)
   foto_url   String?      @db.VarChar(255)
   updated_at DateTime     @default(now())
   alicuotas  ALICUOTAS[]
@@ -359,4 +360,14 @@ model RESIDENTES_REALES {
   created_at DateTime @default(now())
 
   @@unique([cedula, manzana, villa], name: "uq_padron_cedula_ubicacion")
+}
+
+model ADMINISTRADORES_REALES {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_administrador_ext String   @unique @db.VarChar(30)
+  cedula               String   @db.VarChar(20)
+  nombres              String?  @db.VarChar(150)
+  apellidos            String?  @db.VarChar(150)
+  activo               Boolean  @default(true)
+  created_at           DateTime @default(now())
 }

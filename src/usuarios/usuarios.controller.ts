@@ -8,6 +8,7 @@ import {
   Get,
   Param,
   Patch,
+  Delete,
   UseGuards,
   Req,
 } from '@nestjs/common';
@@ -152,6 +153,16 @@ export class UsuariosController {
     return this.usuariosService.subirFotoPerfil(id, foto);
   }
 
+  @ApiOperation({ summary: 'Eliminar foto de perfil del usuario' })
+  @ApiResponse({ status: 200, description: 'Foto eliminada' })
+  @ApiBearerAuth('JWT-auth')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('administrador', 'residente', 'guardia')
+  @Delete(':id/foto')
+  eliminarFoto(@Param('id') id: string) {
+    return this.usuariosService.eliminarFotoPerfil(id);
+  }
+
   @ApiOperation({ summary: 'Buscar usuario por ID' })
   @ApiResponse({ status: 200, description: 'Usuario encontrado' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
@@ -191,6 +202,12 @@ export class UsuariosController {
   @Get(':id')
   buscarPorId(@Param('id') id: string) {
     return this.usuariosService.buscarPorId(id);
+  }
+
+  @ApiOperation({ summary: 'Validar ID de administrador contra el padrón' })
+  @Get('validar-admin/:id')
+  validarAdmin(@Param('id') id: string) {
+    return this.usuariosService.validarAdministradorReal(id);
   }
 
   @ApiOperation({ summary: 'Actualizar datos del usuario' })

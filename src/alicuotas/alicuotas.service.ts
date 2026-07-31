@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CrearAlicuotaDto } from './dto/crear-alicuota.dto';
 import { Response } from 'express';
+import { BadRequestException } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import PDFDocument = require('pdfkit');
 import { ahoraEcuadorLiteral } from '../common/fecha-ecuador';
@@ -47,6 +48,61 @@ export class AlicuotasService {
     });
   }
 
+  // Devuelve las alícuotas y pagos de la villa para un residente NO titular.
+  // Busca al titular de su villa y retorna sus alícuotas + pagos de alícuota
+  // (no incluye pagos de reserva) junto con el nombre del titular.
+  async alicuotasDeVillaParaNoTitular(residenteId: string) {
+    const residente = await this.prisma.rESIDENTES.findUnique({
+      where: { id: residenteId },
+    });
+    if (!residente) throw new NotFoundException('Residente no encontrado');
+
+    // Buscar al titular activo de la misma villa
+    const titular = await this.prisma.rESIDENTES.findFirst({
+      where: {
+        manzana: residente.manzana,
+        villa: residente.villa,
+        titular: true,
+        usuario: { estado: 'aprobado' },
+      },
+      include: { usuario: true },
+    });
+
+    if (!titular) {
+      return {
+        hay_titular: false,
+        titular_nombre: null,
+        alicuotas: [],
+        pagos: [],
+      };
+    }
+
+    // Alícuotas del titular (de la villa)
+    const alicuotas = await this.prisma.aLICUOTAS.findMany({
+      where: { residente_id: titular.id },
+      orderBy: [{ anio: 'desc' }, { mes: 'desc' }],
+    });
+
+    // Pagos SOLO de alícuota (reserva_id null) del titular
+    const pagos = await this.prisma.pAGOS.findMany({
+      where: { residente_id: titular.id, reserva_id: null },
+      include: { pagos_alicuotas: true },
+      orderBy: { fecha_envio: 'desc' },
+    });
+
+    // Primer nombre y ambos apellidos del titular
+    const primerNombre = (titular.usuario.nombres ?? '').trim().split(' ')[0];
+    const apellidos = (titular.usuario.apellidos ?? '').trim();
+
+    return {
+      hay_titular: true,
+      titular_residente_id: titular.id,
+      titular_nombre: `${primerNombre} ${apellidos}`.trim(),
+      alicuotas,
+      pagos,
+    };
+  }
+
   /**
    * Obtiene el registro completo de todas las alícuotas generadas en el sistema.
    * Realiza un "join" (include) con la tabla de residentes y usuarios para poblar
@@ -90,9 +146,28 @@ export class AlicuotasService {
     monto: number,
     fecha_vencimiento: string,
   ) {
+    // No permitir generar alícuotas de meses futuros.
+    // Se toma el mes y año actual en hora de Ecuador.
+    const ahora = ahoraEcuadorLiteral();
+    const anioActual = ahora.getUTCFullYear();
+    const mesActual = ahora.getUTCMonth() + 1; // getUTCMonth es 0-11
+
+    if (anio > anioActual || (anio === anioActual && mes > mesActual)) {
+      throw new BadRequestException(
+        'No se pueden generar alícuotas de meses futuros. Solo el mes actual o meses anteriores.',
+      );
+    }
+
     // Obtener todos los residentes aprobados
     const residentes = await this.prisma.uSUARIOS.findMany({
-      where: { rol: 'residente', estado: 'aprobado' },
+      where: {
+        rol: 'residente',
+        estado: 'aprobado',
+        // Solo el titular de cada villa recibe la alícuota,
+        // para evitar alícuotas duplicadas cuando una villa
+        // tiene varios residentes registrados.
+        residente: { titular: true },
+      },
       include: { residente: true },
     });
 

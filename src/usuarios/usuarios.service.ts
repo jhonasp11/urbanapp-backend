@@ -37,6 +37,29 @@ export class UsuariosService {
     }
   }
 
+  private validarNombre(valor: string, campo: string): void {
+    const texto = (valor ?? '').trim();
+    if (texto.length < 3) {
+      throw new BadRequestException(
+        `El campo ${campo} debe tener al menos 3 caracteres`,
+      );
+    }
+    // Solo letras (con tildes y ñ) y espacios
+    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/.test(texto)) {
+      throw new BadRequestException(
+        `El campo ${campo} solo puede contener letras`,
+      );
+    }
+    // No permitir la misma letra 3 o más veces seguidas (ej. "aaa")
+    if (/(.)\1\1/i.test(texto)) {
+      throw new BadRequestException(`El campo ${campo} no es válido`);
+    }
+    // Al menos una vocal
+    if (!/[aeiouáéíóúAEIOUÁÉÍÓÚ]/.test(texto)) {
+      throw new BadRequestException(`El campo ${campo} no es válido`);
+    }
+  }
+
   private validarCedula(cedula: string): void {
     if (!/^\d{10}$/.test(cedula)) {
       throw new BadRequestException(
@@ -75,6 +98,8 @@ export class UsuariosService {
       );
     }
 
+    this.validarNombre(dto.nombres, 'nombres');
+    this.validarNombre(dto.apellidos, 'apellidos');
     this.validarContrasena(dto.contrasena);
     this.validarCedula(dto.cedula);
 
@@ -343,8 +368,10 @@ export class UsuariosService {
       include: { residente: true },
     });
     if (!usuario) throw new NotFoundException('Usuario no encontrado');
-    if (usuario.rol !== 'residente') {
-      throw new BadRequestException('Solo se pueden gestionar residentes');
+    if (usuario.rol !== 'residente' && usuario.rol !== 'guardia') {
+      throw new BadRequestException(
+        'Solo se pueden gestionar residentes y guardias',
+      );
     }
 
     const estadosValidos = [
@@ -357,9 +384,15 @@ export class UsuariosService {
       throw new BadRequestException('Estado no válido');
     }
 
-    // Aprobar a alguien fuera del padrón exige justificación del administrador
+    // Aprobar a alguien fuera del padrón exige justificación del administrador.
+    // Solo aplica en la aprobación inicial (viene de 'pendiente'),
+    // no en la reactivación de una cuenta desactivada.
     let fueraDePadron = false;
-    if (estado === 'aprobado' && usuario.residente) {
+    if (
+      estado === 'aprobado' &&
+      usuario.estado === 'pendiente' &&
+      usuario.residente
+    ) {
       const enPadron = await this.prisma.rESIDENTES_REALES.findFirst({
         where: {
           cedula: usuario.cedula,
@@ -400,6 +433,65 @@ export class UsuariosService {
         ...(adminUsuarioId && { creado_por: adminUsuarioId }),
       },
     });
+
+    // Asignar titularidad de la villa al aprobar un residente.
+    // El primer residente aprobado de una villa se convierte en titular;
+    // es el único que podrá subir el pago de la alícuota.
+    if (
+      estado === 'aprobado' &&
+      usuario.rol === 'residente' &&
+      usuario.residente
+    ) {
+      const villaTieneTitular = await this.prisma.rESIDENTES.findFirst({
+        where: {
+          manzana: usuario.residente.manzana,
+          villa: usuario.residente.villa,
+          titular: true,
+          usuario: { estado: 'aprobado' },
+          usuario_id: { not: id },
+        },
+      });
+
+      // Si la villa aún no tiene titular activo, este residente lo será.
+      await this.prisma.rESIDENTES.update({
+        where: { usuario_id: id },
+        data: { titular: !villaTieneTitular },
+      });
+    }
+
+    // Reasignar titularidad si se desactiva/rechaza a un residente titular.
+    // El siguiente residente aprobado más antiguo de la villa pasa a ser titular.
+    if (
+      (estado === 'desactivado' || estado === 'rechazado') &&
+      usuario.rol === 'residente' &&
+      usuario.residente &&
+      usuario.residente.titular
+    ) {
+      // Quitar la titularidad al residente que se desactiva
+      await this.prisma.rESIDENTES.update({
+        where: { usuario_id: id },
+        data: { titular: false },
+      });
+
+      // Buscar al siguiente residente aprobado más antiguo de la misma villa
+      const siguiente = await this.prisma.rESIDENTES.findFirst({
+        where: {
+          manzana: usuario.residente.manzana,
+          villa: usuario.residente.villa,
+          usuario: { estado: 'aprobado' },
+          usuario_id: { not: id },
+        },
+        orderBy: { usuario: { created_at: 'asc' } },
+      });
+
+      // Si existe, se convierte en el nuevo titular
+      if (siguiente) {
+        await this.prisma.rESIDENTES.update({
+          where: { id: siguiente.id },
+          data: { titular: true },
+        });
+      }
+    }
 
     const accionLog =
       {
@@ -653,6 +745,34 @@ export class UsuariosService {
     return { mensaje: 'Foto de perfil actualizada', foto_url: url };
   }
 
+  async eliminarFotoPerfil(id: string) {
+    const usuario = await this.prisma.uSUARIOS.findUnique({
+      where: { id },
+      include: { residente: true, administrador: true, guardia: true },
+    });
+    if (!usuario) throw new NotFoundException('Usuario no encontrado');
+
+    // Poner foto_url en null según el rol (el archivo permanece en Cloudinary)
+    if (usuario.rol === 'residente' && usuario.residente) {
+      await this.prisma.rESIDENTES.update({
+        where: { usuario_id: id },
+        data: { foto_url: null, updated_at: ahoraEcuadorLiteral() },
+      });
+    } else if (usuario.rol === 'administrador' && usuario.administrador) {
+      await this.prisma.aDMINISTRADORES.update({
+        where: { usuario_id: id },
+        data: { foto_url: null, updated_at: ahoraEcuadorLiteral() },
+      });
+    } else if (usuario.rol === 'guardia' && usuario.guardia) {
+      await this.prisma.gUARDIAS.update({
+        where: { usuario_id: id },
+        data: { foto_url: null, updated_at: ahoraEcuadorLiteral() },
+      });
+    }
+
+    return { mensaje: 'Foto de perfil eliminada' };
+  }
+
   // Verifica si una cédula + manzana + villa coinciden con el padrón de residentes reales
   async verificarPadron(cedula: string, manzana: string, villa: string) {
     const enPadron = await this.prisma.rESIDENTES_REALES.findFirst({
@@ -664,6 +784,40 @@ export class UsuariosService {
       },
     });
     return { verificado: !!enPadron };
+  }
+
+  // Valida el ID de administrador contra el padrón de administradores reales.
+  // Devuelve los datos para autocompletar si existe y está activo.
+  async validarAdministradorReal(idExt: string) {
+    const admin = await this.prisma.aDMINISTRADORES_REALES.findUnique({
+      where: { id_administrador_ext: idExt },
+    });
+
+    if (!admin || !admin.activo) {
+      return {
+        valido: false,
+        mensaje:
+          'El ID de administrador no existe o no está autorizado. Verifica el dato con la administración.',
+      };
+    }
+
+    // Verificar que este ID no haya sido usado ya en un registro
+    const yaRegistrado = await this.prisma.aDMINISTRADORES.findFirst({
+      where: { id_administrador: idExt },
+    });
+    if (yaRegistrado) {
+      return {
+        valido: false,
+        mensaje: 'Este ID de administrador ya tiene una cuenta registrada.',
+      };
+    }
+
+    return {
+      valido: true,
+      cedula: admin.cedula,
+      nombres: admin.nombres,
+      apellidos: admin.apellidos,
+    };
   }
 
   // Lista los residentes reales de una manzana (padrón)

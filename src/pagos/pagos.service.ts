@@ -231,6 +231,13 @@ export class PagosService {
 
     // RESERVA: si el pago es de una reserva, reflejar el resultado en la reserva
     if (pago.reserva_id) {
+      // Traer el área para el mensaje de la notificación
+      const reservaData = await this.prisma.rESERVAS.findUnique({
+        where: { id: pago.reserva_id },
+        include: { area: true },
+      });
+      const nombreArea = reservaData?.area?.nombre ?? 'el área social';
+
       if (dto.estado === 'aprobado') {
         await this.prisma.rESERVAS.update({
           where: { id: pago.reserva_id },
@@ -253,6 +260,33 @@ export class PagosService {
             bloqueo_hasta: null,
           },
         });
+      }
+
+      // Notificar al residente el resultado de la reserva con pago
+      try {
+        const usuario = pago.residente?.usuario;
+        if (usuario) {
+          const aprobado = dto.estado === 'aprobado';
+          const titulo = aprobado ? 'Reserva confirmada' : 'Reserva denegada';
+          let mensaje: string;
+          if (aprobado) {
+            mensaje = `Tu reserva de "${nombreArea}" ha sido confirmada.`;
+          } else {
+            mensaje = dto.observacion_admin
+              ? `Tu reserva de "${nombreArea}" ha sido denegada. Motivo: ${dto.observacion_admin}`
+              : `Tu reserva de "${nombreArea}" ha sido denegada.`;
+          }
+
+          await this.notificaciones.crear(
+            usuario.id,
+            'reserva',
+            titulo,
+            mensaje,
+            usuario.fcm_token ?? undefined,
+          );
+        }
+      } catch (e) {
+        console.error('Error notificando la reserva:', e);
       }
     }
 
