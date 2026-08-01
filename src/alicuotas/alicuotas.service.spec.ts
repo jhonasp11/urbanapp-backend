@@ -3,7 +3,7 @@ import { AlicuotasService } from './alicuotas.service';
 
 /**
  * Suite de pruebas unitarias para AlicuotasService.
- * Utiliza Jest y las herramientas de testing de NestJS para verificar 
+ * Utiliza Jest y las herramientas de testing de NestJS para verificar
  * la lógica de negocio de forma aislada.
  */
 

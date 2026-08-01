@@ -344,6 +344,7 @@ export class AlicuotasService {
     anio: number | undefined,
     formato: string,
     res: Response,
+    generado_por?: string,
   ) {
     const where: any = { residente_id };
     if (anio) where.anio = anio;
@@ -400,6 +401,19 @@ export class AlicuotasService {
       ? `Mz ${residente.manzana} · Villa ${residente.villa}`
       : '';
 
+    // Si quien genera el PDF NO es el titular (residente distinto),
+    // se obtiene su nombre para mostrar "Generado por".
+    let nombreGeneradoPor: string | null = null;
+    if (generado_por && generado_por !== residente_id) {
+      const gen = await this.prisma.rESIDENTES.findUnique({
+        where: { id: generado_por },
+        include: { usuario: true },
+      });
+      if (gen) {
+        nombreGeneradoPor = `${gen.usuario.nombres} ${gen.usuario.apellidos}`;
+      }
+    }
+
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
@@ -414,13 +428,20 @@ export class AlicuotasService {
       anio ? `Año: ${anio}` : 'Todos los años',
     );
 
-    // Datos del residente
+    // Datos del residente (titular de la villa)
     doc
       .fontSize(11)
       .font('Helvetica-Bold')
       .fillColor(this.grisTexto)
-      .text(nombre, 50, doc.y);
+      .text(`Titular de villa: ${nombre}`, 50, doc.y);
     doc.fontSize(9).font('Helvetica').fillColor('#777777').text(mzVilla);
+    if (nombreGeneradoPor) {
+      doc
+        .fontSize(9)
+        .font('Helvetica')
+        .fillColor('#777777')
+        .text(`Generado por: ${nombreGeneradoPor}`);
+    }
     doc.moveDown(0.8);
 
     // Resumen
